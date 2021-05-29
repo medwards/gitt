@@ -81,11 +81,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let size = rect.size();
             let chunks = tui::layout::Layout::default()
                 .direction(tui::layout::Direction::Vertical)
-                .constraints([tui::layout::Constraint::Min(2)].as_ref())
+                .margin(2)
+                .constraints(
+                    [
+                        tui::layout::Constraint::Length(7),
+                        tui::layout::Constraint::Min(2),
+                    ]
+                    .as_ref(),
+                )
                 .split(size);
 
-            let commit_items: Vec<_> = commits[revwalk_index..revwalk_index + size.height as usize]
+            let commit_items: Vec<_> = commits
                 .iter()
+                .skip(revwalk_index)
+                .take(chunks[0].height as usize)
                 .map(commit_list_item)
                 .collect();
 
@@ -94,7 +103,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .block(commits_block)
                 .highlight_style(tui::style::Style::default());
 
-            rect.render_widget(list.clone(), chunks[0]);
+            let details_block = commit_details(
+                &repository,
+                &commits
+                    .iter()
+                    .nth(revwalk_index)
+                    .expect("unexpected missing commit"),
+            )
+            .block(tui::widgets::Block::default().title("Details"));
+
+            rect.render_widget(list, chunks[0]);
+            rect.render_widget(details_block, chunks[1])
         })?;
 
         // TODO: what if someone commits while this is blocking?
@@ -141,6 +160,35 @@ fn commit_list_item(commit: &git2::Commit) -> tui::widgets::ListItem<'static> {
         tui::text::Span::raw(" "),
         tui::text::Span::styled(author, tui::style::Style::default()),
     ]))
+}
+
+fn commit_details(
+    repo: &git2::Repository,
+    commit: &git2::Commit,
+) -> tui::widgets::Paragraph<'static> {
+    let mut details = format!(
+        "{}\n{}\n",
+        commit.id(),
+        commit
+            .message()
+            .unwrap_or_else(|| "INVALID UTF8 IN COMMIT MESSAGE\n")
+    );
+    if commit.parents().len() <= 1 {
+        let parent_tree = commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
+        let diff = repo
+            .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
+            .expect("Unable to create diff");
+        diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+            match line.origin() {
+                ' ' | '+' | '-' => details.push_str(line.origin().to_string().as_str()),
+                _ => {}
+            }
+            details.push_str(std::str::from_utf8(line.content()).unwrap());
+            true
+        })
+        .expect("Unable to format diff");
+    }
+    tui::widgets::Paragraph::new(details)
 }
 
 fn format_time(time: &git2::Time) -> String {
