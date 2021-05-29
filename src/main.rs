@@ -1,3 +1,4 @@
+use chrono::offset::TimeZone;
 use std::str::FromStr;
 
 enum Event<I> {
@@ -31,11 +32,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Unable to select HEAD for revwalker");
 
     // Some things in the walk are not commits
-    let authors: Vec<_> = walker
+    let commits: Vec<_> = walker
         .flat_map(|oid| {
             repository.find_commit(oid.expect("Unable to get object id from repository"))
         })
-        .map(|c| c.author().to_string())
         .collect();
 
     // TODO: might want to wrap walker in a double ended iterator implementation to let us walk
@@ -74,6 +74,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = tui::Terminal::new(backend)?;
     terminal.clear()?;
 
+    let mut revwalk_index: usize = 0;
+
     loop {
         terminal.draw(|rect| {
             let size = rect.size();
@@ -82,16 +84,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .constraints([tui::layout::Constraint::Min(2)].as_ref())
                 .split(size);
 
-            let commit_items: Vec<_> = authors
+            let commit_items: Vec<_> = commits[revwalk_index..revwalk_index + size.height as usize]
                 .iter()
-                .map(|a| {
-                    tui::widgets::ListItem::new(tui::text::Spans::from(vec![
-                        tui::text::Span::styled(a.clone(), tui::style::Style::default()),
-                    ]))
-                })
+                .map(commit_list_item)
                 .collect();
 
-            let commits_block = tui::widgets::Block::default();
+            let commits_block = tui::widgets::Block::default().title("Commits");
             let list = tui::widgets::List::new(commit_items)
                 .block(commits_block)
                 .highlight_style(tui::style::Style::default());
@@ -100,19 +98,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
 
         // TODO: what if someone commits while this is blocking?
-        match rx.recv()? {
-            Event::Input(event) => match event.code {
-                crossterm::event::KeyCode::Char('q') => {
-                    crossterm::terminal::disable_raw_mode()?;
-                    terminal.show_cursor()?;
-                    break;
-                }
-                _ => {}
-            },
-            Event::Tick => {}
+        {
+            use crossterm::event::KeyCode::*;
+            match rx.recv()? {
+                Event::Input(event) => match event.code {
+                    Char('q') => {
+                        crossterm::terminal::disable_raw_mode()?;
+                        terminal.show_cursor()?;
+                        break;
+                    }
+                    Down | Char('j') => {
+                        // TODO: don't go past the end of the revwalk
+                        revwalk_index = revwalk_index + 1;
+                    }
+                    Up | Char('k') => {
+                        revwalk_index = revwalk_index.saturating_sub(1);
+                    }
+                    _ => {}
+                },
+                Event::Tick => {}
+            }
         }
     }
     Ok(())
+}
+
+fn commit_list_item(commit: &git2::Commit) -> tui::widgets::ListItem<'static> {
+    let time = format_time(&commit.time());
+    // TODO: If this needs to be length limited include unicode_segmentation
+    let title = commit
+        .message()
+        .unwrap_or_else(|| "INVALID UTF8 IN COMMIT MESSAGE")
+        .split("\n")
+        .nth(0)
+        .expect("message body was bad")
+        .to_owned();
+    let author = commit.author().to_string();
+    tui::widgets::ListItem::new(tui::text::Spans::from(vec![
+        tui::text::Span::styled(time, tui::style::Style::default()),
+        tui::text::Span::raw(" "),
+        tui::text::Span::styled(title, tui::style::Style::default()),
+        tui::text::Span::raw(" "),
+        tui::text::Span::styled(author, tui::style::Style::default()),
+    ]))
+}
+
+fn format_time(time: &git2::Time) -> String {
+    let tz = chrono::FixedOffset::east_opt(time.offset_minutes() * 60)
+        .expect("timezone offset was too big");
+    let dt = tz.timestamp(time.seconds(), 0);
+    dt.to_rfc3339()
 }
 
 fn app_args() -> clap::App<'static> {

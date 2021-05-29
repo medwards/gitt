@@ -11,3 +11,4 @@ git2 = "0.13"
 crossterm = { version = "0.19" }
 tui = { version = "0.14", default-features = false, features = ['crossterm'] }
 clap = { version = "3.0.0-beta.2" }
+chrono = "0.4.19"
