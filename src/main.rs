@@ -43,7 +43,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Hello, world!");
 
     // ui stuff
-    crossterm::terminal::enable_raw_mode().expect("can run in raw mode");
     let (tx, rx) = std::sync::mpsc::channel();
     let tick_rate = std::time::Duration::from_millis(200);
     std::thread::spawn(move || {
@@ -69,6 +68,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+    crossterm::terminal::enable_raw_mode().expect("can run in raw mode");
     let stdout = std::io::stdout();
     let backend = tui::backend::CrosstermBackend::new(stdout);
     let mut terminal = tui::Terminal::new(backend)?;
@@ -124,6 +125,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Char('q') => {
                         crossterm::terminal::disable_raw_mode()?;
                         terminal.show_cursor()?;
+                        crossterm::execute!(
+                            std::io::stdout(),
+                            crossterm::terminal::LeaveAlternateScreen
+                        )?;
                         break;
                     }
                     Down | Char('j') => {
