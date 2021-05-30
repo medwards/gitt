@@ -5,6 +5,8 @@ use tui::style::Style;
 use tui::text::Span;
 use tui::text::Spans;
 
+mod model;
+
 enum Event<I> {
     Input(I),
     Tick,
@@ -26,25 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_str(),
     );
 
-    let mut walker = repository.revwalk().expect("Unable to walk revisions");
-
-    // walker needs to be initialized see https://github.com/rust-lang/git2-rs/blob/master/examples/log.rs#L120
-    // TODO: accept a revision identifier (ie branch name, commit id, etc.) and initialize revwalk
-    // with this instead
-    walker
-        .push_head()
-        .expect("Unable to select HEAD for revwalker");
-
-    // Some things in the walk are not commits
-    let commits: Vec<_> = walker
-        .flat_map(|oid| {
-            repository.find_commit(oid.expect("Unable to get object id from repository"))
-        })
-        .collect();
-
-    // TODO: might want to wrap walker in a double ended iterator implementation to let us walk
-    // backwards (ie when we paginate backwards) alternatively need to track depth into the walk
-    println!("Hello, world!");
+    let mut app_model = model::AppModel::new(repository, None, 0);
 
     // ui stuff
     let (tx, rx) = std::sync::mpsc::channel();
@@ -79,7 +63,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = tui::Terminal::new(backend)?;
     terminal.clear()?;
 
-    let mut revwalk_index: usize = 0;
     let mut commit_list_state = tui::widgets::ListState::default();
     commit_list_state.select(Some(0));
 
@@ -105,12 +88,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let commits_block = tui::widgets::Block::default();
             commit_list_height = commits_block.inner(chunk_commit).height as usize;
 
-            let commit_items: Vec<_> = commits
-                .iter()
-                .skip(revwalk_index)
-                .take(commit_list_height)
-                .map(commit_list_item)
-                .collect();
+            let commits = app_model.commits(commit_list_height);
+            let commit_items: Vec<_> = commits.iter().map(commit_list_item).collect();
 
             let list = tui::widgets::List::new(commit_items)
                 .block(commits_block)
@@ -119,11 +98,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
 
             let details_block = commit_details(
-                &repository,
+                app_model.repository(),
                 &commits
                     .iter()
-                    .nth(revwalk_index + commit_list_state.selected().unwrap_or(0))
-                    .expect("unexpected missing commit"),
+                    .nth(commit_list_state.selected().unwrap_or(0))
+                    .expect("Could not find selected commit"),
             )
             .block(tui::widgets::Block::default());
 
@@ -144,19 +123,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     break;
                 }
                 crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => {
-                    // TODO: don't go past the end of the revwalk
                     match commit_list_state.selected() {
                         Some(index) => commit_list_state.select(Some(index + 1)),
                         None => commit_list_state.select(Some(0)),
                     };
                     if commit_list_state.selected().unwrap_or(0) >= commit_list_height {
                         commit_list_state.select(Some(commit_list_height - 1));
-                        revwalk_index = revwalk_index + 1;
+                        if app_model.remaining(commit_list_height) > 0 {
+                            app_model.increment();
+                        }
                     }
                 }
                 crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => {
                     if commit_list_state.selected().unwrap_or(commit_list_height) == 0 {
-                        revwalk_index = revwalk_index.saturating_sub(1);
+                        app_model.decrement();
                     }
                     match commit_list_state.selected() {
                         Some(index) => commit_list_state.select(Some(index.saturating_sub(1))),
