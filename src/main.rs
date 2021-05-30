@@ -134,15 +134,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .for_each(|_| app_model.decrement());
                 }
                 crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => {
+                    if app_model.remaining(commit_list_height) == 0 {
+                        continue;
+                    }
                     match commit_list_state.selected() {
                         Some(index) => commit_list_state.select(Some(index + 1)),
                         None => commit_list_state.select(Some(0)),
                     };
                     if commit_list_state.selected().unwrap_or(0) >= commit_list_height {
                         commit_list_state.select(Some(commit_list_height - 1));
-                        if app_model.remaining(commit_list_height) > 0 {
-                            app_model.increment();
-                        }
+                        app_model.increment();
                     }
                 }
                 crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => {
