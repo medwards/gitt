@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_str(),
     );
 
-    let mut app_model = model::AppModel::new(repository, None, 0);
+    let mut app_model = model::AppModel::new(repository, None);
 
     // ui stuff
     let (tx, rx) = std::sync::mpsc::channel();

@@ -8,11 +8,11 @@ pub struct AppModel {
 }
 
 impl AppModel {
-    pub fn new(repository: Repository, revision: Option<String>, revision_index: usize) -> Self {
+    pub fn new(repository: Repository, revision: Option<String>) -> Self {
         let mut model = Self {
             repository,
             revision: None,
-            revision_index,
+            revision_index: 0,
             revision_max: 0,
         };
         model.set_revision(revision);
