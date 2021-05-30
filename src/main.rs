@@ -76,8 +76,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     terminal.clear()?;
 
     let mut revwalk_index: usize = 0;
+    let mut commit_list_state = tui::widgets::ListState::default();
+    commit_list_state.select(Some(0));
 
     loop {
+        let mut commit_list_height = 0;
         terminal.draw(|rect| {
             let size = rect.size();
             let chunks = tui::layout::Layout::default()
@@ -92,56 +95,72 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .split(size);
 
+            let commits_block = tui::widgets::Block::default().title("Commits");
+            commit_list_height = commits_block.inner(chunks[0]).height as usize;
+
             let commit_items: Vec<_> = commits
                 .iter()
                 .skip(revwalk_index)
-                .take(chunks[0].height as usize)
+                .take(commit_list_height)
                 .map(commit_list_item)
                 .collect();
 
-            let commits_block = tui::widgets::Block::default().title("Commits");
             let list = tui::widgets::List::new(commit_items)
                 .block(commits_block)
-                .highlight_style(tui::style::Style::default());
+                .highlight_style(
+                    tui::style::Style::default().add_modifier(tui::style::Modifier::BOLD),
+                );
 
             let details_block = commit_details(
                 &repository,
                 &commits
                     .iter()
-                    .nth(revwalk_index)
+                    .nth(revwalk_index + commit_list_state.selected().unwrap_or(0))
                     .expect("unexpected missing commit"),
             )
             .block(tui::widgets::Block::default().title("Details"));
 
-            rect.render_widget(list, chunks[0]);
+            rect.render_stateful_widget(list, chunks[0], &mut commit_list_state);
             rect.render_widget(details_block, chunks[1])
         })?;
 
         // TODO: what if someone commits while this is blocking?
-        {
-            use crossterm::event::KeyCode::*;
-            match rx.recv()? {
-                Event::Input(event) => match event.code {
-                    Char('q') => {
-                        crossterm::terminal::disable_raw_mode()?;
-                        terminal.show_cursor()?;
-                        crossterm::execute!(
-                            std::io::stdout(),
-                            crossterm::terminal::LeaveAlternateScreen
-                        )?;
-                        break;
-                    }
-                    Down | Char('j') => {
-                        // TODO: don't go past the end of the revwalk
+        match rx.recv()? {
+            Event::Input(event) => match event.code {
+                crossterm::event::KeyCode::Char('q') => {
+                    crossterm::terminal::disable_raw_mode()?;
+                    terminal.show_cursor()?;
+                    crossterm::execute!(
+                        std::io::stdout(),
+                        crossterm::terminal::LeaveAlternateScreen
+                    )?;
+                    break;
+                }
+                crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => {
+                    // TODO: don't go past the end of the revwalk
+                    match commit_list_state.selected() {
+                        Some(index) => commit_list_state.select(Some(index + 1)),
+                        None => commit_list_state.select(Some(0)),
+                    };
+                    if commit_list_state.selected().unwrap_or(0) >= commit_list_height {
+                        commit_list_state.select(Some(commit_list_height - 1));
                         revwalk_index = revwalk_index + 1;
                     }
-                    Up | Char('k') => {
+                }
+                crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => {
+                    if commit_list_state.selected().unwrap_or(commit_list_height) == 0 {
                         revwalk_index = revwalk_index.saturating_sub(1);
                     }
-                    _ => {}
-                },
-                Event::Tick => {}
-            }
+                    match commit_list_state.selected() {
+                        Some(index) => commit_list_state.select(Some(index.saturating_sub(1))),
+                        None => {
+                            commit_list_state.select(Some(commit_list_height.saturating_sub(1)))
+                        }
+                    };
+                }
+                _ => {}
+            },
+            Event::Tick => {}
         }
     }
     Ok(())
