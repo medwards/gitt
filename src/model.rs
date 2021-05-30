@@ -60,6 +60,14 @@ impl AppModel {
         walker
     }
 
+    pub fn go_to_first(&mut self) {
+        self.revision_index = 0;
+    }
+
+    pub fn go_to_last(&mut self) {
+        self.revision_index = self.revision_max;
+    }
+
     pub fn remaining(&self, skip: usize) -> usize {
         self.revision_max - self.revision_index - skip
     }

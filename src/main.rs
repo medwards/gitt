@@ -122,6 +122,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     )?;
                     break;
                 }
+                crossterm::event::KeyCode::Char('g') => {
+                    commit_list_state.select(Some(0));
+                    app_model.go_to_first();
+                }
+                crossterm::event::KeyCode::Char('G') => {
+                    commit_list_state.select(Some(commit_list_height - 1));
+                    app_model.go_to_last();
+                    (0..commit_list_height)
+                        .into_iter()
+                        .for_each(|_| app_model.decrement());
+                }
                 crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => {
                     match commit_list_state.selected() {
                         Some(index) => commit_list_state.select(Some(index + 1)),
