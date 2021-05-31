@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     commit_list_state.select(Some(0));
     let mut handler = controller::EventHandler::new(tick_rate, commit_list_state, 0);
 
+    // TODO: use RAII for this somehow
     crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     crossterm::terminal::enable_raw_mode().expect("can run in raw mode");
     let stdout = std::io::stdout();

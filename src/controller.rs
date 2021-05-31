@@ -52,6 +52,9 @@ pub struct EventHandler {
     receiver: Receiver<Event<KeyEvent>>,
     // TODO: these should be in the model
     pub list_state: ListState,
+    // TODO: this has weird behaviour since its derived from the view but if its not a fixed layout
+    // constraint then we don't know the height until render time.
+    // Maybe draw once /wo the content before the loop starts to get the initial height?
     pub list_height: usize,
 }
 
