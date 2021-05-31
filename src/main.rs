@@ -24,7 +24,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_str(),
     );
 
-    let mut app_model = model::AppModel::new(repository, None);
+    let mut app_model = model::AppModel::new(
+        model::AppState::Commits,
+        repository,
+        matches.value_of("COMMITTISH").map(|s| s.to_string()),
+    );
 
     let tick_rate = std::time::Duration::from_millis(200);
     let mut commit_list_state = tui::widgets::ListState::default();
@@ -186,5 +190,10 @@ fn app_args() -> clap::App<'static> {
                 .long("working-directory")
                 .value_name("PATH")
                 .about("Use PATH as the working directory of gitt"),
+        )
+        .arg(
+            clap::Arg::new("COMMITTISH")
+                .index(1)
+                .about("Git ref to view"),
         )
 }

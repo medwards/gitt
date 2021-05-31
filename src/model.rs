@@ -1,4 +1,4 @@
-use git2::{Commit, Repository};
+use git2::{Commit, Repository, Revspec};
 
 #[derive(PartialEq, Eq)]
 pub enum AppState {
@@ -9,21 +9,21 @@ pub enum AppState {
 pub struct AppModel {
     pub app_state: AppState,
     repository: Repository,
-    revision: Option<String>,
+    revspec: Option<String>,
     revision_index: usize,
     revision_max: usize,
 }
 
 impl AppModel {
-    pub fn new(app_state: AppState, repository: Repository, revision: Option<String>) -> Self {
+    pub fn new(app_state: AppState, repository: Repository, revspec: Option<String>) -> Self {
         let mut model = Self {
             app_state,
             repository,
-            revision: None,
+            revspec: None,
             revision_index: 0,
             revision_max: 0,
         };
-        model.set_revision(revision);
+        model.set_revision(revspec);
         model
     }
 
@@ -32,7 +32,14 @@ impl AppModel {
     }
 
     pub fn set_revision(&mut self, revision: Option<String>) {
-        self.revision = revision;
+        // TODO: replace hacky rev validation
+        // Can't store the raw Revspec because it contains a reference to the repository
+        if let Some(ref rev) = revision {
+            self.repository
+                .revparse(rev)
+                .expect("Invalid revision specifier");
+        };
+        self.revspec = revision;
         self.revision_index = 0;
         self.revision_max = self.walker().count();
     }
@@ -56,9 +63,13 @@ impl AppModel {
             .repository
             .revwalk()
             .expect("Unable to initialize revwalk");
-        if let Some(git_ref) = self.revision.as_ref() {
+        if let Some(rev) = self.revspec.as_ref() {
+            let rev = self
+                .repository
+                .revparse(rev.as_str())
+                .expect("Invalid revision specifier");
             walker
-                .push_ref(git_ref)
+                .push(rev.from().expect("missing spec").id())
                 .expect("Unable to push ref onto revwalk");
         } else {
             walker
