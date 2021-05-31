@@ -5,12 +5,8 @@ use tui::style::Style;
 use tui::text::Span;
 use tui::text::Spans;
 
+mod controller;
 mod model;
-
-enum Event<I> {
-    Input(I),
-    Tick,
-}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = app_args();
@@ -30,31 +26,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut app_model = model::AppModel::new(repository, None);
 
-    // ui stuff
-    let (tx, rx) = std::sync::mpsc::channel();
     let tick_rate = std::time::Duration::from_millis(200);
-    std::thread::spawn(move || {
-        let mut last_tick = std::time::Instant::now();
-        loop {
-            let timeout = tick_rate
-                .checked_sub(last_tick.elapsed())
-                .unwrap_or_else(|| std::time::Duration::from_secs(0));
-
-            if crossterm::event::poll(timeout).expect("poll works") {
-                if let crossterm::event::Event::Key(key) =
-                    crossterm::event::read().expect("can read events")
-                {
-                    tx.send(Event::Input(key)).expect("can send events");
-                }
-            }
-
-            if last_tick.elapsed() >= tick_rate {
-                if let Ok(_) = tx.send(Event::Tick) {
-                    last_tick = std::time::Instant::now();
-                }
-            }
-        }
-    });
+    let mut commit_list_state = tui::widgets::ListState::default();
+    commit_list_state.select(Some(0));
+    let mut handler = controller::EventHandler::new(tick_rate, commit_list_state, 0);
 
     crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     crossterm::terminal::enable_raw_mode().expect("can run in raw mode");
@@ -63,11 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = tui::Terminal::new(backend)?;
     terminal.clear()?;
 
-    let mut commit_list_state = tui::widgets::ListState::default();
-    commit_list_state.select(Some(0));
-
     loop {
-        let mut commit_list_height = 0;
         terminal.draw(|rect| {
             let size = rect.size();
             let chunks = tui::layout::Layout::default()
@@ -86,9 +57,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let chunk_commit = chunks[0];
             let chunk_details = chunks[2];
             let commits_block = tui::widgets::Block::default();
-            commit_list_height = commits_block.inner(chunk_commit).height as usize;
+            handler.list_height = commits_block.inner(chunk_commit).height as usize;
 
-            let commits = app_model.commits(commit_list_height);
+            let commits = app_model.commits(handler.list_height);
             let commit_items: Vec<_> = commits.iter().map(commit_list_item).collect();
 
             let list = tui::widgets::List::new(commit_items)
@@ -101,65 +72,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 app_model.repository(),
                 &commits
                     .iter()
-                    .nth(commit_list_state.selected().unwrap_or(0))
+                    .nth(handler.list_state.selected().unwrap_or(0))
                     .expect("Could not find selected commit"),
             )
             .block(tui::widgets::Block::default());
 
-            rect.render_stateful_widget(list, chunk_commit, &mut commit_list_state);
+            rect.render_stateful_widget(list, chunk_commit, &mut handler.list_state);
             rect.render_widget(details_block, chunk_details)
         })?;
 
-        // TODO: what if someone commits while this is blocking?
-        match rx.recv()? {
-            Event::Input(event) => match event.code {
-                crossterm::event::KeyCode::Char('q') => {
-                    crossterm::terminal::disable_raw_mode()?;
-                    terminal.show_cursor()?;
-                    crossterm::execute!(
-                        std::io::stdout(),
-                        crossterm::terminal::LeaveAlternateScreen
-                    )?;
-                    break;
-                }
-                crossterm::event::KeyCode::Char('g') => {
-                    commit_list_state.select(Some(0));
-                    app_model.go_to_first();
-                }
-                crossterm::event::KeyCode::Char('G') => {
-                    commit_list_state.select(Some(commit_list_height - 1));
-                    app_model.go_to_last();
-                    (0..commit_list_height)
-                        .into_iter()
-                        .for_each(|_| app_model.decrement());
-                }
-                crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => {
-                    if app_model.remaining(commit_list_height) == 0 {
-                        continue;
-                    }
-                    match commit_list_state.selected() {
-                        Some(index) => commit_list_state.select(Some(index + 1)),
-                        None => commit_list_state.select(Some(0)),
-                    };
-                    if commit_list_state.selected().unwrap_or(0) >= commit_list_height {
-                        commit_list_state.select(Some(commit_list_height - 1));
-                        app_model.increment();
-                    }
-                }
-                crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => {
-                    if commit_list_state.selected().unwrap_or(commit_list_height) == 0 {
-                        app_model.decrement();
-                    }
-                    match commit_list_state.selected() {
-                        Some(index) => commit_list_state.select(Some(index.saturating_sub(1))),
-                        None => {
-                            commit_list_state.select(Some(commit_list_height.saturating_sub(1)))
-                        }
-                    };
-                }
-                _ => {}
-            },
-            Event::Tick => {}
+        if handler.update_model(&mut app_model).is_err()
+            || app_model.app_state == model::AppState::Finished
+        {
+            crossterm::terminal::disable_raw_mode()?;
+            terminal.show_cursor()?;
+            crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
+            break;
         }
     }
     Ok(())

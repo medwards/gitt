@@ -1,6 +1,13 @@
 use git2::{Commit, Repository};
 
+#[derive(PartialEq, Eq)]
+pub enum AppState {
+    Commits,
+    Finished,
+}
+
 pub struct AppModel {
+    pub app_state: AppState,
     repository: Repository,
     revision: Option<String>,
     revision_index: usize,
@@ -8,8 +15,9 @@ pub struct AppModel {
 }
 
 impl AppModel {
-    pub fn new(repository: Repository, revision: Option<String>) -> Self {
+    pub fn new(app_state: AppState, repository: Repository, revision: Option<String>) -> Self {
         let mut model = Self {
+            app_state,
             repository,
             revision: None,
             revision_index: 0,
