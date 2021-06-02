@@ -1,4 +1,4 @@
-use git2::{Commit, Repository, Revspec};
+use git2::{Commit, Repository};
 
 #[derive(PartialEq, Eq)]
 pub enum AppState {
@@ -55,9 +55,6 @@ impl AppModel {
             .collect()
     }
 
-    // walker needs to be initialized see https://github.com/rust-lang/git2-rs/blob/master/examples/log.rs#L120
-    // TODO: accept a revision identifier (ie branch name, commit id, etc.) and initialize revwalk
-    // with this instead
     fn walker(&self) -> git2::Revwalk {
         let mut walker = self
             .repository
