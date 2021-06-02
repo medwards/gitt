@@ -85,16 +85,15 @@ impl EventHandler {
                         .for_each(|_| model.decrement());
                 }
                 crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => {
-                    if model.remaining(self.list_height) == 0 {
-                        return Ok(());
-                    }
                     match self.list_state.selected() {
                         Some(index) => self.list_state.select(Some(index + 1)),
                         None => self.list_state.select(Some(0)),
                     };
                     if self.list_state.selected().unwrap_or(0) >= self.list_height {
                         self.list_state.select(Some(self.list_height - 1));
-                        model.increment();
+                        if model.remaining(self.list_height) > 0 {
+                            model.increment();
+                        }
                     }
                 }
                 crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => {

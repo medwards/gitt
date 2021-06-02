@@ -88,7 +88,7 @@ impl AppModel {
     }
 
     pub fn remaining(&self, skip: usize) -> usize {
-        self.revision_max - self.revision_index - skip
+        (self.revision_max - self.revision_index).saturating_sub(skip)
     }
 
     pub fn increment(&mut self) {

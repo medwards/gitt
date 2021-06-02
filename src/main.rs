@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .margin(2)
                 .constraints(
                     [
-                        tui::layout::Constraint::Length(7),
+                        tui::layout::Constraint::Percentage(20),
                         tui::layout::Constraint::Length(1),
                         tui::layout::Constraint::Min(2),
                     ]
@@ -62,10 +62,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let chunk_commit = chunks[0];
             let chunk_details = chunks[2];
             let commits_block = tui::widgets::Block::default();
-            handler.list_height = commits_block.inner(chunk_commit).height as usize;
+            let requested_commits = commits_block.inner(chunk_commit).height as usize;
 
-            let commits = app_model.commits(handler.list_height);
+            let commits = app_model.commits(requested_commits);
             let commit_items: Vec<_> = commits.iter().map(commit_list_item).collect();
+            handler.list_height = commits.len();
 
             let list = tui::widgets::List::new(commit_items)
                 .block(commits_block)
