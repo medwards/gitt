@@ -1,9 +1,12 @@
 use git2::{Commit, Repository};
+use tui::style::{Color, Style};
+use tui::text::{Span, Spans};
 use tui::widgets::ListState;
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum AppState {
     Commits,
+    Details,
     Finished,
 }
 
@@ -15,6 +18,8 @@ pub struct AppModel {
     revision_window_index: ListState,
     revision_window_length: usize,
     revision_max: usize,
+    diff_index: usize,
+    diff_length: usize,
 }
 
 impl AppModel {
@@ -27,13 +32,11 @@ impl AppModel {
             revision_window_index: ListState::default(),
             revision_window_length: 1,
             revision_max: 0,
+            diff_index: 0,
+            diff_length: 1,
         };
         model.set_revision(revspec);
         model
-    }
-
-    pub fn repository(&self) -> &Repository {
-        &self.repository
     }
 
     pub fn set_revision(&mut self, revision: Option<String>) {
@@ -49,6 +52,7 @@ impl AppModel {
         self.revision_window_index.select(Some(0));
         self.revision_window_length = 1;
         self.revision_max = self.walker().count();
+        self.diff_length = self.diff().len();
     }
 
     // Returns commits from revision_index to revision_index + revision_window_length
@@ -75,6 +79,65 @@ impl AppModel {
             .skip(self.revision_index)
             .nth(self.revision_window_index.selected().unwrap_or(0))
             .expect("Unexpected missing commit")
+    }
+
+    pub fn diff(&self) -> Vec<Spans> {
+        let commit = self.commit();
+        let mut text = vec![Spans::from(vec![Span::raw(commit.id().to_string())])];
+        text.append(
+            &mut commit
+                .message()
+                .unwrap_or_else(|| "INVALID MESSAGE")
+                .split("\n")
+                .map(|s| s.to_string())
+                .map(|s| Spans::from(vec![Span::raw(s)]))
+                .collect(),
+        );
+
+        if commit.parents().len() <= 1 {
+            let parent_tree = commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
+            let diff = self
+                .repository
+                .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
+                .expect("Unable to create diff");
+            diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+                let (origin, style) = match line.origin() {
+                    'F' => {
+                        text.append(
+                            &mut std::str::from_utf8(line.content())
+                                .unwrap()
+                                .split("\n")
+                                .map(|s| s.to_string())
+                                .map(|s| {
+                                    Spans::from(vec![Span::styled(
+                                        s,
+                                        Style::default().fg(Color::Gray),
+                                    )])
+                                })
+                                .collect(),
+                        );
+                        return true;
+                    }
+                    'H' => (None, Style::default().fg(Color::Cyan)),
+                    ' ' => (None, Style::default()),
+                    '+' => (Some(line.origin()), Style::default().fg(Color::Green)),
+                    '-' => (Some(line.origin()), Style::default().fg(Color::Red)),
+                    _ => (None, Style::default()),
+                };
+
+                let spans = vec![
+                    Span::styled(origin.unwrap_or(' ').to_string(), style),
+                    Span::styled(
+                        std::str::from_utf8(line.content()).unwrap().to_string(),
+                        style,
+                    ),
+                ];
+                text.push(Spans::from(spans));
+                true
+            })
+            .expect("Unable to format diff");
+        }
+        text
     }
 
     fn walker(&self) -> git2::Revwalk {
@@ -108,13 +171,15 @@ impl AppModel {
 
     pub fn go_to_first_revision(&mut self) {
         self.revision_index = 0;
-        self.revision_window_index.select(Some(0))
+        self.revision_window_index.select(Some(0));
+        self.diff_reset();
     }
 
     pub fn go_to_last_revision(&mut self) {
         self.revision_index = self.revision_max - self.revision_window_length;
         self.revision_window_index
-            .select(Some(self.revision_window_length - 1))
+            .select(Some(self.revision_window_length - 1));
+        self.diff_reset();
     }
 
     pub fn increment_revision(&mut self) {
@@ -129,6 +194,7 @@ impl AppModel {
             // Increment the entire window
             self.revision_index = self.revision_index + 1;
         }
+        self.diff_reset();
     }
 
     pub fn decrement_revision(&mut self) {
@@ -138,5 +204,33 @@ impl AppModel {
         } else {
             self.revision_index = self.revision_index.saturating_sub(1);
         }
+        self.diff_reset();
+    }
+
+    fn diff_reset(&mut self) {
+        self.diff_index = 0;
+        self.diff_length = self.diff().len();
+    }
+
+    pub fn diff_line_scroll(&self) -> usize {
+        self.diff_index
+    }
+
+    pub fn go_to_first_diff_line(&mut self) {
+        self.diff_index = 0;
+    }
+
+    pub fn go_to_last_diff_line(&mut self) {
+        self.diff_index = self.diff_length - 1;
+    }
+
+    pub fn increment_diff_line(&mut self) {
+        if self.diff_index < self.diff_length - 1 {
+            self.diff_index = self.diff_index + 1;
+        }
+    }
+
+    pub fn decrement_diff_line(&mut self) {
+        self.diff_index = self.diff_index.saturating_sub(1);
     }
 }

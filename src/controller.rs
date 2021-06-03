@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crossterm::event::{poll, read, Event as CrosstermEvent, KeyEvent};
 
-use crate::model::AppModel;
+use crate::model::{AppModel, AppState};
 
 pub enum Event<I> {
     Input(I),
@@ -60,21 +60,47 @@ impl EventHandler {
 
     pub fn update_model(&mut self, model: &mut AppModel) -> Result<(), RecvError> {
         match self.receiver.recv()? {
-            Event::Input(event) => match event.code {
-                crossterm::event::KeyCode::Char('q') => {
-                    model.app_state = crate::model::AppState::Finished;
+            Event::Input(event) => match (model.app_state, event.code) {
+                (_, crossterm::event::KeyCode::Char('q')) => {
+                    model.app_state = AppState::Finished;
                 }
-                crossterm::event::KeyCode::Char('g') => {
+                (_, crossterm::event::KeyCode::Tab) => {
+                    // TODO: statemachine for app state progression
+                    if model.app_state == AppState::Commits {
+                        model.app_state = AppState::Details;
+                    } else if model.app_state == AppState::Details {
+                        model.app_state = AppState::Commits;
+                    }
+                }
+                // Commit navigation
+                (AppState::Commits, crossterm::event::KeyCode::Char('g')) => {
                     model.go_to_first_revision();
                 }
-                crossterm::event::KeyCode::Char('G') => {
+                (AppState::Commits, crossterm::event::KeyCode::Char('G')) => {
                     model.go_to_last_revision();
                 }
-                crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => {
+                (AppState::Commits, crossterm::event::KeyCode::Down)
+                | (AppState::Commits, crossterm::event::KeyCode::Char('j')) => {
                     model.increment_revision();
                 }
-                crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => {
+                (AppState::Commits, crossterm::event::KeyCode::Up)
+                | (AppState::Commits, crossterm::event::KeyCode::Char('k')) => {
                     model.decrement_revision();
+                }
+                // Details navigation
+                (AppState::Details, crossterm::event::KeyCode::Char('g')) => {
+                    model.go_to_first_diff_line();
+                }
+                (AppState::Details, crossterm::event::KeyCode::Char('G')) => {
+                    model.go_to_last_diff_line();
+                }
+                (AppState::Details, crossterm::event::KeyCode::Down)
+                | (AppState::Details, crossterm::event::KeyCode::Char('j')) => {
+                    model.increment_diff_line();
+                }
+                (AppState::Details, crossterm::event::KeyCode::Up)
+                | (AppState::Details, crossterm::event::KeyCode::Char('k')) => {
+                    model.decrement_diff_line();
                 }
                 _ => {}
             },

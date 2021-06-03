@@ -1,9 +1,7 @@
 use chrono::offset::TimeZone;
 use std::str::FromStr;
 use tui::style::Color;
-use tui::style::Style;
 use tui::text::Span;
-use tui::text::Spans;
 
 mod controller;
 mod model;
@@ -78,7 +76,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tui::style::Style::default().add_modifier(tui::style::Modifier::BOLD),
                 );
 
-            let details_block = commit_details(app_model.repository(), &app_model.commit())
+            let details_block = tui::widgets::Paragraph::new(app_model.diff())
+                .scroll((app_model.diff_line_scroll() as u16, 0))
                 .block(tui::widgets::Block::default());
 
             let (list_state, _) = app_model.revision_window();
@@ -116,63 +115,6 @@ fn commit_list_item(commit: &git2::Commit) -> tui::widgets::ListItem<'static> {
         Span::raw(" "),
         Span::styled(author, tui::style::Style::default()),
     ]))
-}
-
-fn commit_details(
-    repo: &git2::Repository,
-    commit: &git2::Commit,
-) -> tui::widgets::Paragraph<'static> {
-    let mut text = vec![Spans::from(vec![Span::raw(commit.id().to_string())])];
-    text.append(
-        &mut commit
-            .message()
-            .unwrap_or_else(|| "INVALID MESSAGE")
-            .split("\n")
-            .map(|s| s.to_string())
-            .map(|s| Spans::from(vec![Span::raw(s)]))
-            .collect(),
-    );
-
-    if commit.parents().len() <= 1 {
-        let parent_tree = commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
-        let diff = repo
-            .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
-            .expect("Unable to create diff");
-        diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-            let (origin, style) = match line.origin() {
-                'F' => {
-                    text.append(
-                        &mut std::str::from_utf8(line.content())
-                            .unwrap()
-                            .split("\n")
-                            .map(|s| s.to_string())
-                            .map(|s| {
-                                Spans::from(vec![Span::styled(s, Style::default().fg(Color::Gray))])
-                            })
-                            .collect(),
-                    );
-                    return true;
-                }
-                'H' => (None, Style::default().fg(Color::Cyan)),
-                ' ' => (None, Style::default()),
-                '+' => (Some(line.origin()), Style::default().fg(Color::Green)),
-                '-' => (Some(line.origin()), Style::default().fg(Color::Red)),
-                _ => (None, Style::default()),
-            };
-
-            let spans = vec![
-                Span::styled(origin.unwrap_or(' ').to_string(), style),
-                Span::styled(
-                    std::str::from_utf8(line.content()).unwrap().to_string(),
-                    style,
-                ),
-            ];
-            text.push(Spans::from(spans));
-            true
-        })
-        .expect("Unable to format diff");
-    }
-    tui::widgets::Paragraph::new(text)
 }
 
 fn format_time(time: &git2::Time) -> String {
