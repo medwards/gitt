@@ -31,9 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let tick_rate = std::time::Duration::from_millis(200);
-    let mut commit_list_state = tui::widgets::ListState::default();
-    commit_list_state.select(Some(0));
-    let mut handler = controller::EventHandler::new(tick_rate, commit_list_state, 0);
+    let mut handler = controller::EventHandler::new(tick_rate);
 
     // TODO: use RAII for this somehow
     crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
@@ -62,11 +60,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let chunk_commit = chunks[0];
             let chunk_details = chunks[2];
             let commits_block = tui::widgets::Block::default();
-            let requested_commits = commits_block.inner(chunk_commit).height as usize;
+            app_model.resize_revision_window(commits_block.inner(chunk_commit).height as usize);
 
-            let commits = app_model.commits(requested_commits);
+            // TODO: something awkward happening with the borrow checker here
+            // commits depends on the lifetime of app_model for some reason which means
+            // there is an immutable borrow that conflices with the mutable borrow of
+            // resize_revision_window
+            let commits = app_model.commits();
             let commit_items: Vec<_> = commits.iter().map(commit_list_item).collect();
-            handler.list_height = commits.len();
+            let length = commits.len();
+            drop(commits);
+            app_model.resize_revision_window(length);
 
             let list = tui::widgets::List::new(commit_items)
                 .block(commits_block)
@@ -74,16 +78,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tui::style::Style::default().add_modifier(tui::style::Modifier::BOLD),
                 );
 
-            let details_block = commit_details(
-                app_model.repository(),
-                &commits
-                    .iter()
-                    .nth(handler.list_state.selected().unwrap_or(0))
-                    .expect("Could not find selected commit"),
-            )
-            .block(tui::widgets::Block::default());
+            let details_block = commit_details(app_model.repository(), &app_model.commit())
+                .block(tui::widgets::Block::default());
 
-            rect.render_stateful_widget(list, chunk_commit, &mut handler.list_state);
+            let (list_state, _) = app_model.revision_window();
+            rect.render_stateful_widget(list, chunk_commit, &mut list_state.clone());
             rect.render_widget(details_block, chunk_details)
         })?;
 

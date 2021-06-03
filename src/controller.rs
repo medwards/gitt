@@ -2,7 +2,6 @@ use std::sync::mpsc::{channel, Receiver, RecvError};
 use std::time::Duration;
 
 use crossterm::event::{poll, read, Event as CrosstermEvent, KeyEvent};
-use tui::widgets::ListState;
 
 use crate::model::AppModel;
 
@@ -50,20 +49,12 @@ pub fn event_receiver(tick_rate: Duration) -> Receiver<Event<KeyEvent>> {
 
 pub struct EventHandler {
     receiver: Receiver<Event<KeyEvent>>,
-    // TODO: these should be in the model
-    pub list_state: ListState,
-    // TODO: this has weird behaviour since its derived from the view but if its not a fixed layout
-    // constraint then we don't know the height until render time.
-    // Maybe draw once /wo the content before the loop starts to get the initial height?
-    pub list_height: usize,
 }
 
 impl EventHandler {
-    pub fn new(tick_rate: Duration, list_state: ListState, list_height: usize) -> Self {
+    pub fn new(tick_rate: Duration) -> Self {
         Self {
             receiver: event_receiver(tick_rate),
-            list_state,
-            list_height,
         }
     }
 
@@ -74,38 +65,16 @@ impl EventHandler {
                     model.app_state = crate::model::AppState::Finished;
                 }
                 crossterm::event::KeyCode::Char('g') => {
-                    self.list_state.select(Some(0));
-                    model.go_to_first();
+                    model.go_to_first_revision();
                 }
                 crossterm::event::KeyCode::Char('G') => {
-                    self.list_state.select(Some(self.list_height - 1));
-                    model.go_to_last();
-                    (0..self.list_height)
-                        .into_iter()
-                        .for_each(|_| model.decrement());
+                    model.go_to_last_revision();
                 }
                 crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => {
-                    match self.list_state.selected() {
-                        Some(index) => self.list_state.select(Some(index + 1)),
-                        None => self.list_state.select(Some(0)),
-                    };
-                    if self.list_state.selected().unwrap_or(0) >= self.list_height {
-                        self.list_state.select(Some(self.list_height - 1));
-                        if model.remaining(self.list_height) > 0 {
-                            model.increment();
-                        }
-                    }
+                    model.increment_revision();
                 }
                 crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => {
-                    if self.list_state.selected().unwrap_or(self.list_height) == 0 {
-                        model.decrement();
-                    }
-                    match self.list_state.selected() {
-                        Some(index) => self.list_state.select(Some(index.saturating_sub(1))),
-                        None => self
-                            .list_state
-                            .select(Some(self.list_height.saturating_sub(1))),
-                    };
+                    model.decrement_revision();
                 }
                 _ => {}
             },

@@ -1,4 +1,5 @@
 use git2::{Commit, Repository};
+use tui::widgets::ListState;
 
 #[derive(PartialEq, Eq)]
 pub enum AppState {
@@ -11,6 +12,8 @@ pub struct AppModel {
     repository: Repository,
     revspec: Option<String>,
     revision_index: usize,
+    revision_window_index: ListState,
+    revision_window_length: usize,
     revision_max: usize,
 }
 
@@ -21,6 +24,8 @@ impl AppModel {
             repository,
             revspec: None,
             revision_index: 0,
+            revision_window_index: ListState::default(),
+            revision_window_length: 1,
             revision_max: 0,
         };
         model.set_revision(revspec);
@@ -41,18 +46,35 @@ impl AppModel {
         };
         self.revspec = revision;
         self.revision_index = 0;
+        self.revision_window_index.select(Some(0));
+        self.revision_window_length = 1;
         self.revision_max = self.walker().count();
     }
 
-    pub fn commits(&self, max: usize) -> Vec<Commit> {
+    // Returns commits from revision_index to revision_index + revision_window_length
+    // This means something has to initialize revision_window_length
+    // (otherwise it defaults to 1)
+    pub fn commits(&self) -> Vec<Commit> {
         self.walker()
             .flat_map(|oid| {
                 self.repository
                     .find_commit(oid.expect("Revwalk unable to get oid"))
             })
             .skip(self.revision_index)
-            .take(max)
+            .take(self.revision_window_length)
             .collect()
+    }
+
+    pub fn commit(&self) -> Commit {
+        // TODO: reuse commits?
+        self.walker()
+            .flat_map(|oid| {
+                self.repository
+                    .find_commit(oid.expect("Revwalk unable to get oid"))
+            })
+            .skip(self.revision_index)
+            .nth(self.revision_window_index.selected().unwrap_or(0))
+            .expect("Unexpected missing commit")
     }
 
     fn walker(&self) -> git2::Revwalk {
@@ -76,25 +98,45 @@ impl AppModel {
         walker
     }
 
-    pub fn go_to_first(&mut self) {
+    pub fn revision_window(&self) -> (&ListState, usize) {
+        (&self.revision_window_index, self.revision_window_length)
+    }
+    pub fn resize_revision_window(&mut self, length: usize) {
+        // TODO: On resize check that revision_window_index is still within the window
+        self.revision_window_length = length;
+    }
+
+    pub fn go_to_first_revision(&mut self) {
         self.revision_index = 0;
+        self.revision_window_index.select(Some(0))
     }
 
-    pub fn go_to_last(&mut self) {
-        self.revision_index = self.revision_max;
+    pub fn go_to_last_revision(&mut self) {
+        self.revision_index = self.revision_max - self.revision_window_length;
+        self.revision_window_index
+            .select(Some(self.revision_window_length - 1))
     }
 
-    pub fn remaining(&self, skip: usize) -> usize {
-        (self.revision_max - self.revision_index).saturating_sub(skip)
-    }
-
-    pub fn increment(&mut self) {
-        if self.revision_index < self.revision_max - 1 {
+    pub fn increment_revision(&mut self) {
+        if self.revision_window_index.selected().unwrap_or(0) < self.revision_window_length - 1 {
+            // Increment the position in the window
+            self.revision_window_index
+                .select(Some(self.revision_window_index.selected().unwrap_or(0) + 1));
+        } else if self.revision_window_index.selected().unwrap_or(0)
+            == self.revision_window_length - 1
+            && self.revision_index < self.revision_max - self.revision_window_length
+        {
+            // Increment the entire window
             self.revision_index = self.revision_index + 1;
         }
     }
 
-    pub fn decrement(&mut self) {
-        self.revision_index = self.revision_index.saturating_sub(1);
+    pub fn decrement_revision(&mut self) {
+        if self.revision_window_index.selected().unwrap_or(0) > 0 {
+            self.revision_window_index
+                .select(self.revision_window_index.selected().map(|s| s - 1));
+        } else {
+            self.revision_index = self.revision_index.saturating_sub(1);
+        }
     }
 }
