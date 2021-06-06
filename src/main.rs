@@ -58,7 +58,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let chunk_commit = chunks[0];
             let chunk_details = chunks[2];
             let commits_block = tui::widgets::Block::default();
+            let details_block = tui::widgets::Block::default();
             app_model.resize_revision_window(commits_block.inner(chunk_commit).height as usize);
+            app_model.resize_diff_window(details_block.inner(chunk_details).height as usize);
 
             // TODO: something awkward happening with the borrow checker here
             // commits depends on the lifetime of app_model for some reason which means
@@ -78,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let details_block = tui::widgets::Paragraph::new(app_model.diff())
                 .scroll((app_model.diff_line_scroll() as u16, 0))
-                .block(tui::widgets::Block::default());
+                .block(details_block);
 
             let (list_state, _) = app_model.revision_window();
             rect.render_stateful_widget(list, chunk_commit, &mut list_state.clone());

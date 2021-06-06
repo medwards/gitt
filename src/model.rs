@@ -19,6 +19,7 @@ pub struct AppModel {
     revision_window_length: usize,
     revision_max: usize,
     diff_index: usize,
+    diff_window_length: usize,
     diff_length: usize,
 }
 
@@ -33,6 +34,7 @@ impl AppModel {
             revision_window_length: 1,
             revision_max: 0,
             diff_index: 0,
+            diff_window_length: 1,
             diff_length: 1,
         };
         model.set_revision(revspec);
@@ -52,6 +54,8 @@ impl AppModel {
         self.revision_window_index.select(Some(0));
         self.revision_window_length = 1;
         self.revision_max = self.walker().count();
+        self.diff_index = 0;
+        self.diff_window_length = 1;
         self.diff_length = self.diff().len();
     }
 
@@ -209,7 +213,12 @@ impl AppModel {
 
     fn diff_reset(&mut self) {
         self.diff_index = 0;
+        self.diff_window_length = 1;
         self.diff_length = self.diff().len();
+    }
+
+    pub fn resize_diff_window(&mut self, window_length: usize) {
+        self.diff_window_length = window_length;
     }
 
     pub fn diff_line_scroll(&self) -> usize {
@@ -221,11 +230,11 @@ impl AppModel {
     }
 
     pub fn go_to_last_diff_line(&mut self) {
-        self.diff_index = self.diff_length - 1;
+        self.diff_index = self.diff_length.saturating_sub(self.diff_window_length)
     }
 
     pub fn increment_diff_line(&mut self) {
-        if self.diff_index < self.diff_length - 1 {
+        if self.diff_index < self.diff_length.saturating_sub(self.diff_window_length) {
             self.diff_index = self.diff_index + 1;
         }
     }
