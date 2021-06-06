@@ -5,6 +5,7 @@ use tui::text::Span;
 
 mod controller;
 mod model;
+mod widgets;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = app_args();
@@ -57,10 +58,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let chunk_commit = chunks[0];
             let chunk_details = chunks[2];
+            let chunk_details = tui::layout::Layout::default()
+                .direction(tui::layout::Direction::Horizontal)
+                .constraints(
+                    [
+                        tui::layout::Constraint::Min(10),
+                        tui::layout::Constraint::Length(1),
+                    ]
+                    .as_ref(),
+                )
+                .split(chunk_details);
+            let chunk_details_pane = chunk_details[0];
+            let chunk_details_scroll = chunk_details[1];
             let commits_block = tui::widgets::Block::default();
             let details_block = tui::widgets::Block::default();
             app_model.resize_revision_window(commits_block.inner(chunk_commit).height as usize);
-            app_model.resize_diff_window(details_block.inner(chunk_details).height as usize);
+            app_model.resize_diff_window(details_block.inner(chunk_details_pane).height as usize);
 
             // TODO: something awkward happening with the borrow checker here
             // commits depends on the lifetime of app_model for some reason which means
@@ -78,13 +91,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tui::style::Style::default().add_modifier(tui::style::Modifier::BOLD),
                 );
 
+            let (details_index, details_window, details_length) = app_model.diff_line_scroll();
+            let details_scroll = widgets::VerticalBar {
+                window_index: details_index,
+                window_length: details_window,
+                total_length: details_length,
+                style: tui::style::Style::default().bg(
+                    if app_model.app_state == model::AppState::Details {
+                        tui::style::Color::Gray
+                    } else {
+                        tui::style::Color::Black
+                    },
+                ),
+            };
             let details_block = tui::widgets::Paragraph::new(app_model.diff())
-                .scroll((app_model.diff_line_scroll() as u16, 0))
+                .scroll((details_index as u16, 0))
                 .block(details_block);
 
             let (list_state, _) = app_model.revision_window();
             rect.render_stateful_widget(list, chunk_commit, &mut list_state.clone());
-            rect.render_widget(details_block, chunk_details)
+            rect.render_widget(details_block, chunk_details_pane);
+            rect.render_widget(details_scroll, chunk_details_scroll);
         })?;
 
         if handler.update_model(&mut app_model).is_err()

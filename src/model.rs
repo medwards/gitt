@@ -221,8 +221,8 @@ impl AppModel {
         self.diff_window_length = window_length;
     }
 
-    pub fn diff_line_scroll(&self) -> usize {
-        self.diff_index
+    pub fn diff_line_scroll(&self) -> (usize, usize, usize) {
+        (self.diff_index, self.diff_window_length, self.diff_length)
     }
 
     pub fn go_to_first_diff_line(&mut self) {
