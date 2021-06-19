@@ -93,7 +93,7 @@ impl AppModel {
                 .message()
                 .unwrap_or_else(|| "INVALID MESSAGE")
                 .split("\n")
-                .map(|s| s.to_string())
+                .map(|s| s.trim_end().to_string())
                 .map(|s| Spans::from(vec![Span::raw(s)]))
                 .collect(),
         );
@@ -111,7 +111,7 @@ impl AppModel {
                             &mut std::str::from_utf8(line.content())
                                 .unwrap()
                                 .split("\n")
-                                .map(|s| s.to_string())
+                                .map(|s| s.trim_end().to_string())
                                 .map(|s| {
                                     Spans::from(vec![Span::styled(
                                         s,
@@ -132,7 +132,10 @@ impl AppModel {
                 let spans = vec![
                     Span::styled(origin.unwrap_or(' ').to_string(), style),
                     Span::styled(
-                        std::str::from_utf8(line.content()).unwrap().to_string(),
+                        std::str::from_utf8(line.content())
+                            .unwrap()
+                            .trim_end()
+                            .to_string(),
                         style,
                     ),
                 ];
