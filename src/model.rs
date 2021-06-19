@@ -1,7 +1,7 @@
 use git2::{Commit, Repository};
 use tui::style::{Color, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::ListState;
+use tui::widgets::TableState;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum AppState {
@@ -15,7 +15,7 @@ pub struct AppModel {
     repository: Repository,
     revspec: Option<String>,
     revision_index: usize,
-    revision_window_index: ListState,
+    revision_window_index: TableState,
     revision_window_length: usize,
     revision_max: usize,
     diff_index: usize,
@@ -30,7 +30,7 @@ impl AppModel {
             repository,
             revspec: None,
             revision_index: 0,
-            revision_window_index: ListState::default(),
+            revision_window_index: TableState::default(),
             revision_window_length: 1,
             revision_max: 0,
             diff_index: 0,
@@ -168,7 +168,7 @@ impl AppModel {
         walker
     }
 
-    pub fn revision_window(&self) -> (&ListState, usize) {
+    pub fn revision_window(&self) -> (&TableState, usize) {
         (&self.revision_window_index, self.revision_window_length)
     }
     pub fn resize_revision_window(&mut self, length: usize) {

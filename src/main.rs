@@ -72,6 +72,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let chunk_details_scroll = chunk_details[1];
             let commits_block = tui::widgets::Block::default();
             let details_block = tui::widgets::Block::default();
+            // TODO: these get modified later after we get the commit and commits, should fix this
+            // so its less brittle (ie it is set once and correctly)
             app_model.resize_revision_window(commits_block.inner(chunk_commit).height as usize);
             app_model.resize_diff_window(details_block.inner(chunk_details_pane).height as usize);
 
@@ -85,11 +87,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             drop(commits);
             app_model.resize_revision_window(length);
 
-            let list = tui::widgets::List::new(commit_items)
+            let list = tui::widgets::Table::new(commit_items)
                 .block(commits_block)
                 .highlight_style(
                     tui::style::Style::default().add_modifier(tui::style::Modifier::BOLD),
-                );
+                )
+                .widths(&[
+                    tui::layout::Constraint::Min(2),
+                    tui::layout::Constraint::Max(20),
+                    tui::layout::Constraint::Max(10), // Commit date (truncates time by default)
+                ]);
 
             let (details_index, details_window, details_length) = app_model.diff_line_scroll();
             let details_scroll = widgets::VerticalBar {
@@ -126,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn commit_list_item(commit: &git2::Commit) -> tui::widgets::ListItem<'static> {
+fn commit_list_item(commit: &git2::Commit) -> tui::widgets::Row<'static> {
     let time = format_time(&commit.time());
     // TODO: If this needs to be length limited include unicode_segmentation
     let title = commit
@@ -137,13 +144,7 @@ fn commit_list_item(commit: &git2::Commit) -> tui::widgets::ListItem<'static> {
         .expect("message body was bad")
         .to_owned();
     let author = commit.author().to_string();
-    tui::widgets::ListItem::new(tui::text::Spans::from(vec![
-        Span::styled(time, tui::style::Style::default()),
-        Span::raw(" "),
-        Span::styled(title, tui::style::Style::default().fg(Color::White)),
-        Span::raw(" "),
-        Span::styled(author, tui::style::Style::default()),
-    ]))
+    tui::widgets::Row::new(vec![title, author, time])
 }
 
 fn format_time(time: &git2::Time) -> String {
