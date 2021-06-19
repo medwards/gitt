@@ -1,7 +1,5 @@
 use chrono::offset::TimeZone;
 use std::str::FromStr;
-use tui::style::Color;
-use tui::text::Span;
 
 mod controller;
 mod model;
