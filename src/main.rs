@@ -3,6 +3,8 @@ use std::str::FromStr;
 use tui::style::Color;
 use tui::text::Span;
 
+use crate::model::AppState;
+
 mod controller;
 mod model;
 mod widgets;
@@ -32,6 +34,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tick_rate = std::time::Duration::from_millis(200);
     let mut handler = controller::EventHandler::new(tick_rate);
 
+    tui_logger::init_logger(log::LevelFilter::Trace).expect("Logging not initialized");
+    tui_logger::set_default_level(log::LevelFilter::Trace);
+
     // TODO: use RAII for this somehow
     crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     crossterm::terminal::enable_raw_mode().expect("can run in raw mode");
@@ -42,6 +47,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         terminal.draw(|rect| {
+            if app_model.app_state == AppState::Log {
+                rect.render_widget(tui::widgets::Clear, rect.size());
+                rect.render_widget(
+                    tui_logger::TuiLoggerWidget::default().block(tui::widgets::Block::default()),
+                    rect.size(),
+                );
+                return;
+            }
             let size = rect.size();
             let chunks = tui::layout::Layout::default()
                 .direction(tui::layout::Direction::Vertical)
@@ -104,6 +117,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     },
                 ),
             };
+            log::debug!("{:?}", app_model.diff());
             let details_block = tui::widgets::Paragraph::new(app_model.diff())
                 .scroll((details_index as u16, 0))
                 .block(details_block);

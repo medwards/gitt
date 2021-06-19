@@ -7,6 +7,7 @@ use tui::widgets::ListState;
 pub enum AppState {
     Commits,
     Details,
+    Log,
     Finished,
 }
 

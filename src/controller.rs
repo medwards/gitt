@@ -72,6 +72,14 @@ impl EventHandler {
                         model.app_state = AppState::Commits;
                     }
                 }
+                (_, crossterm::event::KeyCode::Char('~')) => {
+                    // TODO: statemachine for app state progression
+                    if model.app_state != AppState::Log {
+                        model.app_state = AppState::Log;
+                    } else if model.app_state == AppState::Log {
+                        model.app_state = AppState::Commits;
+                    }
+                }
                 // Commit navigation
                 (AppState::Commits, crossterm::event::KeyCode::Char('g')) => {
                     model.go_to_first_revision();
