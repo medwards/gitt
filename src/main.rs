@@ -30,6 +30,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tick_rate = std::time::Duration::from_millis(200);
     let mut handler = controller::EventHandler::new(tick_rate);
 
+    let bounds: Vec<_> = (0..6).map(|_| cassowary::Variable::new()).collect();
+    let window_width = cassowary::Variable::new();
+    let mut column_solver = widgets::commit_list_column_width_solver(&bounds, &window_width);
+
     // TODO: use RAII for this somehow
     crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     crossterm::terminal::enable_raw_mode().expect("can run in raw mode");
@@ -85,17 +89,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             drop(commits);
             app_model.resize_revision_window(length);
 
+            column_solver
+                .suggest_value(window_width, chunk_commit.width as f64)
+                .expect("constraints solver failed");
+            let column_widths = widgets::solver_changes_to_lengths(&column_solver, &bounds);
+
             let list = tui::widgets::Table::new(commit_items)
                 .block(commits_block)
                 .highlight_style(
                     tui::style::Style::default().add_modifier(tui::style::Modifier::BOLD),
                 )
                 // TODO: https://github.com/fdehau/tui-rs/issues/499
-                .widths(&[
-                    tui::layout::Constraint::Length(84),
-                    tui::layout::Constraint::Length(40),
-                    tui::layout::Constraint::Length(10), // Commit date (truncates time by default)
-                ]);
+                .widths(column_widths.as_slice());
 
             let (details_index, details_window, details_length) = app_model.diff_line_scroll();
             let details_scroll = widgets::VerticalBar {
