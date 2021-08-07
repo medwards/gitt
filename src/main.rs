@@ -8,7 +8,9 @@ mod widgets;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = app_args();
     let matches = app.get_matches_from(std::env::args_os());
-    dbg!(&matches);
+    if matches.is_present("verbose") {
+        dbg!(&matches);
+    }
     let repository_dir = matches
         .value_of("working-directory")
         .map(|p| std::path::PathBuf::from_str(p).expect("Invalid path provided"))
@@ -157,6 +159,13 @@ fn app_args() -> clap::App<'static> {
                 .long("working-directory")
                 .value_name("PATH")
                 .about("Use PATH as the working directory of gitt"),
+        )
+        .arg(
+            clap::Arg::new("verbose")
+                .long("verbose")
+                .required(false)
+                .takes_value(false)
+                .about("Emit processing messages"),
         )
         .arg(
             clap::Arg::new("COMMITTISH")
