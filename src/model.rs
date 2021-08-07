@@ -60,8 +60,6 @@ impl AppModel {
     }
 
     // Returns commits from revision_index to revision_index + revision_window_length
-    // This means something has to initialize revision_window_length
-    // (otherwise it defaults to 1)
     pub fn commits(&self) -> Vec<Commit> {
         self.walker()
             .flat_map(|oid| {
@@ -183,6 +181,8 @@ impl AppModel {
             .take(length)
             .count();
         // If there are not enough commits to fill the window, shrink it
+        // This can happen if there are very few commits in the repository, or the window was
+        // resized to be larger after scrolling to near the end of the list of commits
         self.revision_window_length = std::cmp::min(length, commit_count);
     }
 

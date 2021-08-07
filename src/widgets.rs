@@ -72,7 +72,7 @@ pub fn commit_list_column_width_solver(bounds: &[Variable], window_width: &Varia
             // constrain some columns to a range:
             bounds[3] - bounds[2] | LE(REQUIRED) | 40.0,
             bounds[3] - bounds[2] | GE(STRONG) | 20.0,
-            bounds[5] - bounds[4] | LE(REQUIRED) | 15.0,
+            bounds[5] - bounds[4] | LE(REQUIRED) | 16.0,
             bounds[5] - bounds[4] | GE(STRONG) | 10.0,
             // require one column to have a minimum size
             bounds[1] - bounds[0] | GE(STRONG) | 50.0,
