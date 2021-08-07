@@ -74,21 +74,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let chunk_details_scroll = chunk_details[1];
             let commits_block = tui::widgets::Block::default();
             let details_block = tui::widgets::Block::default();
-            // TODO: these get modified later after we get the commit and commits, should fix this
-            // so its less brittle (ie it is set once and correctly)
+
             app_model.resize_revision_window(commits_block.inner(chunk_commit).height as usize);
+            let commit_items: Vec<_> = app_model.commits().iter().map(commit_list_item).collect();
+
             app_model.resize_diff_window(details_block.inner(chunk_details_pane).height as usize);
 
-            // TODO: something awkward happening with the borrow checker here
-            // commits depends on the lifetime of app_model for some reason which means
-            // there is an immutable borrow that conflices with the mutable borrow of
-            // resize_revision_window
-            let commits = app_model.commits();
-            let commit_items: Vec<_> = commits.iter().map(commit_list_item).collect();
-            let length = commits.len();
-            drop(commits);
-            app_model.resize_revision_window(length);
-
+            // TODO: https://github.com/fdehau/tui-rs/issues/499
             column_solver
                 .suggest_value(window_width, chunk_commit.width as f64)
                 .expect("constraints solver failed");
@@ -99,7 +91,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .highlight_style(
                     tui::style::Style::default().add_modifier(tui::style::Modifier::BOLD),
                 )
-                // TODO: https://github.com/fdehau/tui-rs/issues/499
                 .widths(column_widths.as_slice());
 
             let (details_index, details_window, details_length) = app_model.diff_line_scroll();

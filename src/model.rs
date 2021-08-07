@@ -31,7 +31,7 @@ impl AppModel {
             revspec: None,
             revision_index: 0,
             revision_window_index: TableState::default(),
-            revision_window_length: 1,
+            revision_window_length: 0,
             revision_max: 0,
             diff_index: 0,
             diff_window_length: 1,
@@ -52,7 +52,7 @@ impl AppModel {
         self.revspec = revision;
         self.revision_index = 0;
         self.revision_window_index.select(Some(0));
-        self.revision_window_length = 1;
+        self.revision_window_length = self.walker().count();
         self.revision_max = self.walker().count();
         self.diff_index = 0;
         self.diff_window_length = 1;
@@ -172,8 +172,18 @@ impl AppModel {
         (&self.revision_window_index, self.revision_window_length)
     }
     pub fn resize_revision_window(&mut self, length: usize) {
-        // TODO: On resize check that revision_window_index is still within the window
-        self.revision_window_length = length;
+        assert!(self.revision_window_index.selected().unwrap_or(0) <= length);
+        let commit_count = self
+            .walker()
+            .flat_map(|oid| {
+                self.repository
+                    .find_commit(oid.expect("Revwalk unable to get oid"))
+            })
+            .skip(self.revision_index)
+            .take(length)
+            .count();
+        // If there are not enough commits to fill the window, shrink it
+        self.revision_window_length = std::cmp::min(length, commit_count);
     }
 
     pub fn go_to_first_revision(&mut self) {
