@@ -13,16 +13,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let repository_dir = matches
         .value_of("working-directory")
-        .map(|p| std::path::PathBuf::from_str(p).expect("Invalid path provided"))
-        .unwrap_or_else(|| std::env::current_dir().expect("invoked from an invalid directory"));
-    let repository = git2::Repository::discover(&repository_dir).expect(
-        format!(
-            "Unable to load repository at {}",
-            &repository_dir.to_str().unwrap_or_else(|| "").to_owned()
-        )
-        .as_str(),
-    );
-
+        // If present, use working-directory
+        .map(|p| std::path::PathBuf::from_str(p).map_err(|_| "infallible".to_string()))
+        // otherwise use the current dir
+        .or_else(|| Some(std::env::current_dir().map_err(|e| format!("{}", e))))
+        .expect("Missing value AND default for working-directory")?;
+    let repository = git2::Repository::discover(&repository_dir)?;
     let mut app_model = model::AppModel::new(
         model::AppState::Commits,
         repository,
