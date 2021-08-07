@@ -24,7 +24,11 @@ pub struct AppModel {
 }
 
 impl AppModel {
-    pub fn new(app_state: AppState, repository: Repository, revspec: Option<String>) -> Self {
+    pub fn new(
+        app_state: AppState,
+        repository: Repository,
+        revspec: Option<String>,
+    ) -> Result<Self, git2::Error> {
         let mut model = Self {
             app_state,
             repository,
@@ -37,17 +41,15 @@ impl AppModel {
             diff_window_length: 1,
             diff_length: 1,
         };
-        model.set_revision(revspec);
-        model
+        model.set_revision(revspec)?;
+        Ok(model)
     }
 
-    pub fn set_revision(&mut self, revision: Option<String>) {
+    pub fn set_revision(&mut self, revision: Option<String>) -> Result<(), git2::Error> {
         // TODO: replace hacky rev validation
         // Can't store the raw Revspec because it contains a reference to the repository
         if let Some(ref rev) = revision {
-            self.repository
-                .revparse(rev)
-                .expect("Invalid revision specifier");
+            let _ = self.repository.revparse(rev)?;
         };
         self.revspec = revision;
         self.revision_index = 0;
@@ -57,6 +59,7 @@ impl AppModel {
         self.diff_index = 0;
         self.diff_window_length = 1;
         self.diff_length = self.diff().len();
+        Ok(())
     }
 
     // Returns commits from revision_index to revision_index + revision_window_length

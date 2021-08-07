@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         model::AppState::Commits,
         repository,
         matches.value_of("COMMITTISH").map(|s| s.to_string()),
-    );
+    )?;
 
     let tick_rate = std::time::Duration::from_millis(200);
     let mut handler = controller::EventHandler::new(tick_rate);
