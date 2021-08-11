@@ -10,8 +10,36 @@ pub enum AppState {
     Finished,
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub enum CommitFilter {
+    Path(String),
+    Text(String), // TODO: author? time?
+}
+
+impl CommitFilter {
+    pub fn apply<'a>(&self, commit: &'a Commit<'a>, repository: &'a Repository) -> bool {
+        match self {
+            Self::Path(path_string) => {
+                let parent_tree = commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
+                let diff = repository
+                    .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
+                    .expect("Unable to create diff");
+                diff.deltas().any(|delta| {
+                    let old_file_matches = delta.old_file().path().map(|p| p.to_str())
+                        == Some(Some(path_string.as_str()));
+                    let new_file_matches = delta.new_file().path().map(|p| p.to_str())
+                        == Some(Some(path_string.as_str()));
+                    old_file_matches || new_file_matches
+                })
+            }
+            _ => unimplemented!(),
+        }
+    }
+}
+
 struct CommitView<'a> {
     repository: &'a Repository,
+    filters: &'a Vec<CommitFilter>,
     walker: git2::Revwalk<'a>,
 }
 
@@ -19,6 +47,7 @@ impl<'a> CommitView<'a> {
     pub fn new(
         repository: &'a Repository,
         revision: Option<git2::Revspec<'a>>,
+        filters: &'a Vec<CommitFilter>,
     ) -> Self {
         let mut walker = repository.revwalk().expect("Unable to initialize revwalk");
         if let Some(rev) = revision.as_ref() {
@@ -37,6 +66,7 @@ impl<'a> CommitView<'a> {
 
         Self {
             repository,
+            filters,
             walker,
         }
     }
@@ -49,6 +79,20 @@ impl<'a> Iterator for CommitView<'a> {
             Some(oid) => self
                 .repository
                 .find_commit(oid.expect("Revwalk unable to get oid"))
+                .and_then(|commit| {
+                    if self.filters.is_empty()
+                        || self
+                            .filters
+                            .iter()
+                            .any(|filter| filter.apply(&commit, self.repository))
+                    {
+                        Ok(commit)
+                    } else {
+                        // TODO: get rid of recursion if possible
+                        self.next()
+                            .ok_or_else(|| git2::Error::from_str("Unable to find matching commits"))
+                    }
+                })
                 .ok(),
             None => None,
         }
@@ -59,6 +103,7 @@ pub struct AppModel {
     pub app_state: AppState,
     repository: Repository,
     revspec: Option<String>,
+    filters: Vec<CommitFilter>,
     revision_index: usize,
     revision_window_index: TableState,
     revision_window_length: usize,
@@ -73,11 +118,13 @@ impl AppModel {
         app_state: AppState,
         repository: Repository,
         revspec: Option<String>,
+        filters: Vec<CommitFilter>,
     ) -> Result<Self, git2::Error> {
         let mut model = Self {
             app_state,
             repository,
             revspec: None,
+            filters,
             revision_index: 0,
             revision_window_index: TableState::default(),
             revision_window_length: 0,
@@ -192,7 +239,7 @@ impl AppModel {
                 .revparse(revspec.as_str())
                 .expect("Invalid revision specifier")
         });
-        CommitView::new(&self.repository, rev)
+        CommitView::new(&self.repository, rev, &self.filters)
     }
 
     pub fn revision_window(&self) -> (&TableState, usize) {
