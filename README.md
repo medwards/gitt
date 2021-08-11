@@ -6,7 +6,25 @@
 
 `gitt` with no parameters will show you the history of the current branch in the current directory.
 
-When provided with a commit id or branch name `gitt` will show the history from that tree.
+```
+gitt
+Git repository viewer in your terminal
+
+USAGE:
+    gitt [FLAGS] [OPTIONS] [COMMITTISH] [-- <path>...]
+
+ARGS:
+    <COMMITTISH>    Git ref to view
+    <path>...       Limit commits to the ones touching files in the given paths
+
+FLAGS:
+    -h, --help       Prints help information
+        --verbose    Emit processing messages
+    -V, --version    Prints version information
+
+OPTIONS:
+        --working-directory <PATH>    Use PATH as the working directory of gitt
+```
 
 Use the arrow keys or `j` and `k` to scroll the list or diff, and `tab` to switch the focus between the list and diff.
 

@@ -19,10 +19,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|| Some(std::env::current_dir().map_err(|e| format!("{}", e))))
         .expect("Missing value AND default for working-directory")?;
     let repository = git2::Repository::discover(&repository_dir)?;
+
+    let filters: Vec<_> = matches
+        .values_of("path")
+        .map(|paths| {
+            paths
+                .map(|path| model::CommitFilter::Path(path.to_string()))
+                .collect()
+        })
+        .unwrap_or_else(|| Vec::new());
+
     let mut app_model = model::AppModel::new(
         model::AppState::Commits,
         repository,
         matches.value_of("COMMITTISH").map(|s| s.to_string()),
+        filters,
     )?;
 
     let tick_rate = std::time::Duration::from_millis(200);
@@ -163,9 +174,11 @@ fn app_args() -> clap::App<'static> {
                 .takes_value(false)
                 .about("Emit processing messages"),
         )
+        .arg(clap::Arg::new("COMMITTISH").about("Git ref to view"))
         .arg(
-            clap::Arg::new("COMMITTISH")
-                .index(1)
-                .about("Git ref to view"),
+            clap::Arg::new("path")
+                .multiple(true)
+                .last(true)
+                .about("Limit commits to the ones touching files in the given paths"),
         )
 }
