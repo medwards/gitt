@@ -10,6 +10,51 @@ pub enum AppState {
     Finished,
 }
 
+struct CommitView<'a> {
+    repository: &'a Repository,
+    walker: git2::Revwalk<'a>,
+}
+
+impl<'a> CommitView<'a> {
+    pub fn new(
+        repository: &'a Repository,
+        revision: Option<git2::Revspec<'a>>,
+    ) -> Self {
+        let mut walker = repository.revwalk().expect("Unable to initialize revwalk");
+        if let Some(rev) = revision.as_ref() {
+            walker
+                .push(
+                    rev.from()
+                        .expect("revision specifier not converted into oid")
+                        .id(),
+                )
+                .expect("Unable to push ref onto revwalk");
+        } else {
+            walker
+                .push_head()
+                .expect("Unable to push head onto revwalk");
+        }
+
+        Self {
+            repository,
+            walker,
+        }
+    }
+}
+
+impl<'a> Iterator for CommitView<'a> {
+    type Item = Commit<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.walker.next() {
+            Some(oid) => self
+                .repository
+                .find_commit(oid.expect("Revwalk unable to get oid"))
+                .ok(),
+            None => None,
+        }
+    }
+}
+
 pub struct AppModel {
     pub app_state: AppState,
     repository: Repository,
@@ -65,10 +110,6 @@ impl AppModel {
     // Returns commits from revision_index to revision_index + revision_window_length
     pub fn commits(&self) -> Vec<Commit> {
         self.walker()
-            .flat_map(|oid| {
-                self.repository
-                    .find_commit(oid.expect("Revwalk unable to get oid"))
-            })
             .skip(self.revision_index)
             .take(self.revision_window_length)
             .collect()
@@ -76,11 +117,8 @@ impl AppModel {
 
     pub fn commit(&self) -> Commit {
         // TODO: reuse commits?
+        // TODO: could be empty (or nth goes off the edge of the iterator)
         self.walker()
-            .flat_map(|oid| {
-                self.repository
-                    .find_commit(oid.expect("Revwalk unable to get oid"))
-            })
             .skip(self.revision_index)
             .nth(self.revision_window_index.selected().unwrap_or(0))
             .expect("Unexpected missing commit")
@@ -148,25 +186,13 @@ impl AppModel {
         text
     }
 
-    fn walker(&self) -> git2::Revwalk {
-        let mut walker = self
-            .repository
-            .revwalk()
-            .expect("Unable to initialize revwalk");
-        if let Some(rev) = self.revspec.as_ref() {
-            let rev = self
-                .repository
-                .revparse(rev.as_str())
-                .expect("Invalid revision specifier");
-            walker
-                .push(rev.from().expect("missing spec").id())
-                .expect("Unable to push ref onto revwalk");
-        } else {
-            walker
-                .push_head()
-                .expect("Unable to push head onto revwalk");
-        }
-        walker
+    fn walker(&self) -> CommitView {
+        let rev = self.revspec.as_ref().map(|revspec| {
+            self.repository
+                .revparse(revspec.as_str())
+                .expect("Invalid revision specifier")
+        });
+        CommitView::new(&self.repository, rev)
     }
 
     pub fn revision_window(&self) -> (&TableState, usize) {
@@ -174,15 +200,8 @@ impl AppModel {
     }
     pub fn resize_revision_window(&mut self, length: usize) {
         assert!(self.revision_window_index.selected().unwrap_or(0) <= length);
-        let commit_count = self
-            .walker()
-            .flat_map(|oid| {
-                self.repository
-                    .find_commit(oid.expect("Revwalk unable to get oid"))
-            })
-            .skip(self.revision_index)
-            .take(length)
-            .count();
+        // TODO: just set the length and then check the count with self.commits().count()
+        let commit_count = self.walker().skip(self.revision_index).take(length).count();
         // If there are not enough commits to fill the window, shrink it
         // This can happen if there are very few commits in the repository, or the window was
         // resized to be larger after scrolling to near the end of the list of commits
