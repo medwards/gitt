@@ -173,7 +173,19 @@ impl AppModel {
 
     pub fn diff(&self) -> Vec<Spans> {
         let commit = self.commit();
-        let mut text = vec![Spans::from(vec![Span::raw(commit.id().to_string())])];
+        let mut text = vec![Spans::from(vec![
+            Span::raw(
+                commit
+                    .as_object()
+                    .short_id()
+                    .expect("Unable to write short_id")
+                    .as_str()
+                    .expect("short_id was not valid utf8")
+                    .to_string(),
+            ),
+            Span::raw(" - ".to_string()),
+            Span::raw(commit.id().to_string()),
+        ])];
         text.append(
             &mut commit
                 .message()
