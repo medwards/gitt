@@ -102,6 +102,18 @@ impl EventHandler {
                 | (AppState::Details, crossterm::event::KeyCode::Char('k')) => {
                     model.decrement_diff_line();
                 }
+                (AppState::Details, crossterm::event::KeyCode::PageDown) => {
+                    let (_, window_length, _) = model.diff_line_scroll();
+                    for _ in 0..window_length {
+                        model.increment_diff_line();
+                    }
+                }
+                (AppState::Details, crossterm::event::KeyCode::PageUp) => {
+                    let (_, window_length, _) = model.diff_line_scroll();
+                    for _ in 0..window_length {
+                        model.decrement_diff_line();
+                    }
+                }
                 _ => {}
             },
             Event::Failure => {
