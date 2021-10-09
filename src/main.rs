@@ -177,7 +177,7 @@ fn app_args() -> clap::App<'static> {
         .arg(clap::Arg::new("COMMITTISH").about("Git ref to view"))
         .arg(
             clap::Arg::new("path")
-                .multiple(true)
+                .multiple_values(true)
                 .last(true)
                 .about("Limit commits to the ones touching files in the given paths"),
         )
