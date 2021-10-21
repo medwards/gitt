@@ -2,6 +2,8 @@
 
 `gitt` is a clone of `gitk` that runs in your terminal.
 
+![Screenshot of `gitt`](doc/screenshot.png)
+
 # Usage
 
 `gitt` with no parameters will show you the history of the current branch in the current directory.
