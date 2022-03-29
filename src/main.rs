@@ -158,27 +158,27 @@ fn format_time(time: &git2::Time) -> String {
     dt.to_rfc3339()
 }
 
-fn app_args() -> clap::App<'static> {
-    clap::App::new("gitt")
+fn app_args() -> clap::Command<'static> {
+    clap::Command::new("gitt")
         .about("Git repository viewer in your terminal")
         .arg(
             clap::Arg::new("working-directory")
                 .long("working-directory")
                 .value_name("PATH")
-                .about("Use PATH as the working directory of gitt"),
+                .help("Use PATH as the working directory of gitt"),
         )
         .arg(
             clap::Arg::new("verbose")
                 .long("verbose")
                 .required(false)
                 .takes_value(false)
-                .about("Emit processing messages"),
+                .help("Emit processing messages"),
         )
-        .arg(clap::Arg::new("COMMITTISH").about("Git ref to view"))
+        .arg(clap::Arg::new("COMMITTISH").help("Git ref to view"))
         .arg(
             clap::Arg::new("path")
                 .multiple_values(true)
                 .last(true)
-                .about("Limit commits to the ones touching files in the given paths"),
+                .help("Limit commits to the ones touching files in the given paths"),
         )
 }
