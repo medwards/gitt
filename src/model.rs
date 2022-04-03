@@ -254,6 +254,10 @@ impl AppModel {
         CommitView::new(&self.repository, rev, &self.filters)
     }
 
+    pub fn revision_index(&self) -> usize {
+        self.revision_index
+    }
+
     pub fn revision_window(&self) -> (&TableState, usize) {
         (&self.revision_window_index, self.revision_window_length)
     }

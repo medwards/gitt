@@ -1,14 +1,24 @@
 use chrono::offset::TimeZone;
-use std::str::FromStr;
+use std::{
+    str::FromStr,
+    time::{Duration, Instant},
+};
 
 mod controller;
 mod model;
 mod widgets;
 
+struct Timing {
+    index: usize,
+    duration: Duration,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let start_time = Instant::now();
     let app = app_args();
     let matches = app.get_matches_from(std::env::args_os());
-    if matches.is_present("verbose") {
+    let is_verbose = matches.is_present("verbose");
+    if is_verbose {
         dbg!(&matches);
     }
     let repository_dir = matches
@@ -43,6 +53,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window_width = cassowary::Variable::new();
     let mut column_solver = widgets::commit_list_column_width_solver(&bounds, &window_width);
 
+    if is_verbose {
+        println!("gitt startup took: {:?}", start_time.elapsed());
+    }
+
+    let mut peak_draw = Timing {
+        index: 0,
+        duration: Duration::from_millis(0),
+    };
+
+    let mut peak_update = Timing {
+        index: 0,
+        duration: Duration::from_millis(0),
+    };
+
     // TODO: use RAII for this somehow
     crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     crossterm::terminal::enable_raw_mode().expect("can run in raw mode");
@@ -52,6 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     terminal.clear()?;
 
     loop {
+        let draw_start = Instant::now();
         terminal.draw(|rect| {
             let size = rect.size();
             let chunks = tui::layout::Layout::default()
@@ -125,14 +150,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             rect.render_widget(details_scroll, chunk_details_scroll);
         })?;
 
+        record_peak_timing(draw_start, &mut peak_draw, &app_model);
+
+        let update_start = Instant::now();
         if handler.update_model(&mut app_model).is_err()
             || app_model.app_state == model::AppState::Finished
         {
             crossterm::terminal::disable_raw_mode()?;
             terminal.show_cursor()?;
             crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
+            if is_verbose {
+                println!("Quitting at index {}", app_model.revision_index());
+                println!(
+                    "Peak draw time was {:?} at index {}",
+                    peak_draw.duration, peak_draw.index
+                );
+                println!(
+                    "Peak update time was {:?} at index {}",
+                    peak_update.duration, peak_update.index
+                );
+            }
             break;
         }
+
+        record_peak_timing(update_start, &mut peak_update, &app_model);
     }
     Ok(())
 }
@@ -156,6 +197,14 @@ fn format_time(time: &git2::Time) -> String {
         .expect("timezone offset was too big");
     let dt = tz.timestamp(time.seconds(), 0);
     dt.to_rfc3339()
+}
+
+fn record_peak_timing(instant: Instant, peak_timing: &mut Timing, app_model: &model::AppModel) {
+    let update_duration = instant.elapsed();
+    if peak_timing.duration < update_duration {
+        peak_timing.duration = update_duration;
+        peak_timing.index = app_model.revision_index();
+    }
 }
 
 fn app_args() -> clap::Command<'static> {
