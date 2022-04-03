@@ -1,5 +1,6 @@
 use chrono::offset::TimeZone;
 use std::{
+    collections::HashSet,
     str::FromStr,
     time::{Duration, Instant},
 };
@@ -28,7 +29,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // otherwise use the current dir
         .or_else(|| Some(std::env::current_dir().map_err(|e| format!("{}", e))))
         .expect("Missing value AND default for working-directory")?;
-    let repository = git2::Repository::discover(&repository_dir)?;
 
     let filters: Vec<_> = matches
         .values_of("path")
@@ -39,12 +39,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .unwrap_or_else(|| Vec::new());
 
-    let mut app_model = model::AppModel::new(
+    let repository = git2::Repository::discover(&repository_dir)?;
+    let app_model = model::AppModel::new(
         model::AppState::Commits,
         repository,
         matches.value_of("COMMITTISH").map(|s| s.to_string()),
-        filters,
+        filters.clone(),
     )?;
+
+    let mut app_model = if !filters.is_empty() {
+        let oids: HashSet<_> = app_model.commits().iter().map(|c| c.id()).collect();
+
+        let repository = git2::Repository::discover(&repository_dir)?;
+        model::AppModel::new(
+            model::AppState::Commits,
+            repository,
+            matches.value_of("COMMITTISH").map(|s| s.to_string()),
+            vec![model::CommitFilter::Ids(oids)],
+        )?
+    } else {
+        app_model
+    };
 
     let tick_rate = std::time::Duration::from_millis(200);
     let mut handler = controller::EventHandler::new(tick_rate);

@@ -1,4 +1,6 @@
-use git2::{Commit, Repository};
+use std::collections::HashSet;
+
+use git2::{Commit, Oid, Repository};
 use tui::style::{Color, Style};
 use tui::text::{Span, Spans};
 use tui::widgets::TableState;
@@ -13,6 +15,7 @@ pub enum AppState {
 #[derive(Clone, PartialEq, Eq)]
 pub enum CommitFilter {
     Path(String),
+    Ids(HashSet<Oid>),
     Text(String), // TODO: author? time?
 }
 
@@ -32,6 +35,7 @@ impl CommitFilter {
                     old_file_matches || new_file_matches
                 })
             }
+            Self::Ids(oids) => oids.contains(&commit.id()),
             _ => unimplemented!(),
         }
     }
