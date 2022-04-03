@@ -22,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if is_verbose {
         dbg!(&matches);
     }
+
     let repository_dir = matches
         .value_of("working-directory")
         // If present, use working-directory
@@ -29,6 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // otherwise use the current dir
         .or_else(|| Some(std::env::current_dir().map_err(|e| format!("{}", e))))
         .expect("Missing value AND default for working-directory")?;
+    let revision = matches.value_of("COMMITTISH").map(|s| s.to_string());
 
     let filters: Vec<_> = matches
         .values_of("path")
@@ -40,25 +42,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| Vec::new());
 
     let repository = git2::Repository::discover(&repository_dir)?;
-    let app_model = model::AppModel::new(
-        model::AppState::Commits,
-        repository,
-        matches.value_of("COMMITTISH").map(|s| s.to_string()),
-        filters.clone(),
-    )?;
 
     let mut app_model = if !filters.is_empty() {
-        let oids: HashSet<_> = app_model.commits().iter().map(|c| c.id()).collect();
+        let oids: HashSet<_> = model::CommitView::new(&repository, revision.as_ref(), &filters)
+            .map(|c| c.id())
+            .collect();
 
-        let repository = git2::Repository::discover(&repository_dir)?;
         model::AppModel::new(
             model::AppState::Commits,
             repository,
-            matches.value_of("COMMITTISH").map(|s| s.to_string()),
+            revision,
             vec![model::CommitFilter::Ids(oids)],
         )?
     } else {
-        app_model
+        model::AppModel::new(model::AppState::Commits, repository, revision, filters)?
     };
 
     let tick_rate = std::time::Duration::from_millis(200);

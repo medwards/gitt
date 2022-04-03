@@ -41,7 +41,7 @@ impl CommitFilter {
     }
 }
 
-struct CommitView<'a> {
+pub struct CommitView<'a> {
     repository: &'a Repository,
     filters: &'a Vec<CommitFilter>,
     walker: git2::Revwalk<'a>,
@@ -50,9 +50,15 @@ struct CommitView<'a> {
 impl<'a> CommitView<'a> {
     pub fn new(
         repository: &'a Repository,
-        revision: Option<git2::Revspec<'a>>,
+        revision: Option<&String>,
         filters: &'a Vec<CommitFilter>,
     ) -> Self {
+        let revision = revision.map(|revspec| {
+            repository
+                .revparse(revspec.as_str())
+                .expect("Invalid revision specifier")
+        });
+
         let mut walker = repository.revwalk().expect("Unable to initialize revwalk");
         if let Some(rev) = revision.as_ref() {
             walker
@@ -250,12 +256,7 @@ impl AppModel {
     }
 
     fn walker(&self) -> CommitView {
-        let rev = self.revspec.as_ref().map(|revspec| {
-            self.repository
-                .revparse(revspec.as_str())
-                .expect("Invalid revision specifier")
-        });
-        CommitView::new(&self.repository, rev, &self.filters)
+        CommitView::new(&self.repository, self.revspec.as_ref(), &self.filters)
     }
 
     pub fn revision_index(&self) -> usize {
