@@ -40,4 +40,4 @@ Use the arrow keys or `j` and `k` to scroll the list or diff, and `tab` to switc
 
 `gitt` is a useful learning experience for myself and nicely addresses my main pain points when using `gitk`.
 
-`gitt` is intended to be a `gitk` clone, and not a tool to help with other `git` workflows. For example [`gitui`](https://github.com/extrawurst/gitui) includes tools to help with staging changes. This is intentionally out of scope for `gitt`.
+`gitt` is intended to be a `gitk` clone, and not a tool to help with other `git` workflows. For example [`gitui`](https://github.com/extrawurst/gitui) or [`tig`](https://github.com/jonas/tig) include features to help with stage changes. This is intentionally out of scope for `gitt`.
