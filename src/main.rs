@@ -1,6 +1,7 @@
 use chrono::offset::TimeZone;
 use std::{
     collections::HashSet,
+    path::Path,
     str::FromStr,
     time::{Duration, Instant},
 };
@@ -36,7 +37,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .values_of("path")
         .map(|paths| {
             paths
-                .map(|path| model::CommitFilter::Path(path.to_string()))
+                .map(|path| {
+                    let path = Path::new(path).to_path_buf();
+                    model::CommitFilter::Path(path)
+                })
                 .collect()
         })
         .unwrap_or_else(|| Vec::new());

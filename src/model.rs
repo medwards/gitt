@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::PathBuf;
 
 use git2::{Commit, Oid, Repository};
 use tui::style::{Color, Style};
@@ -14,7 +15,7 @@ pub enum AppState {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum CommitFilter {
-    Path(String),
+    Path(PathBuf),
     Ids(HashSet<Oid>),
     Text(String), // TODO: author? time?
 }
@@ -22,16 +23,22 @@ pub enum CommitFilter {
 impl CommitFilter {
     pub fn apply<'a>(&self, commit: &'a Commit<'a>, repository: &'a Repository) -> bool {
         match self {
-            Self::Path(path_string) => {
+            Self::Path(path_match) => {
                 let parent_tree = commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
                 let diff = repository
                     .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
                     .expect("Unable to create diff");
                 diff.deltas().any(|delta| {
-                    let old_file_matches = delta.old_file().path().map(|p| p.to_str())
-                        == Some(Some(path_string.as_str()));
-                    let new_file_matches = delta.new_file().path().map(|p| p.to_str())
-                        == Some(Some(path_string.as_str()));
+                    let old_file_matches = delta
+                        .old_file()
+                        .path()
+                        .map(|p| p.starts_with(path_match))
+                        .unwrap_or(false);
+                    let new_file_matches = delta
+                        .new_file()
+                        .path()
+                        .map(|p| p.starts_with(path_match))
+                        .unwrap_or(false);
                     old_file_matches || new_file_matches
                 })
             }
@@ -158,6 +165,9 @@ impl AppModel {
         self.revision_window_index.select(Some(0));
         self.revision_window_length = self.walker().count();
         self.revision_max = self.walker().count();
+        if self.revision_max == 0 {
+            return Err(git2::Error::from_str("No commits found"));
+        }
         self.diff_index = 0;
         self.diff_window_length = 1;
         self.diff_length = self.diff().len();
