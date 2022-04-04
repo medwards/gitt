@@ -13,19 +13,16 @@ gitt
 Git repository viewer in your terminal
 
 USAGE:
-    gitt [FLAGS] [OPTIONS] [COMMITTISH] [-- <path>...]
+    gitt [OPTIONS] [COMMITTISH] [-- <path>...]
 
 ARGS:
     <COMMITTISH>    Git ref to view
     <path>...       Limit commits to the ones touching files in the given paths
 
-FLAGS:
-    -h, --help       Prints help information
-        --verbose    Emit processing messages
-    -V, --version    Prints version information
-
 OPTIONS:
-        --working-directory <PATH>    Use PATH as the working directory of gitt
+    -h, --help                        Print help information
+        --verbose                     Emit processing messages
+        --working-directory <PATH>    Use PATH as the working directory of git
 ```
 
 Use the arrow keys or `j` and `k` to scroll the list or diff, and `tab` to switch the focus between the list and diff.
