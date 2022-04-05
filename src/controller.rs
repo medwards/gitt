@@ -60,163 +60,133 @@ impl EventHandler {
 
     pub fn update_model(&mut self, model: &mut AppModel) -> Result<(), RecvError> {
         match self.receiver.recv()? {
-            Event::Input(event) => match (model.app_state, event) {
-                (
-                    _,
-                    KeyEvent {
-                        code: KeyCode::Char('q'),
-                        ..
-                    },
-                ) => {
-                    model.app_state = AppState::Finished;
-                }
-                (
-                    _,
-                    KeyEvent {
-                        code: KeyCode::Tab, ..
-                    },
-                ) => {
-                    // TODO: statemachine for app state progression
-                    if model.app_state == AppState::Commits {
-                        model.app_state = AppState::Details;
-                    } else if model.app_state == AppState::Details {
-                        model.app_state = AppState::Commits;
+            Event::Input(event) => {
+                if model.app_state == AppState::Commits {
+                    match event {
+                        KeyEvent {
+                            code: KeyCode::Char('q'),
+                            ..
+                        } => {
+                            model.app_state = AppState::Finished;
+                        }
+                        KeyEvent {
+                            code: KeyCode::Tab, ..
+                        } => {
+                            // TODO: statemachine for app state progression
+                            model.app_state = AppState::Details;
+                        }
+                        // Commit navigation
+                        KeyEvent {
+                            code: KeyCode::Char('g'),
+                            ..
+                        } => {
+                            model.go_to_first_revision();
+                        }
+                        KeyEvent {
+                            code: KeyCode::Char('G'),
+                            ..
+                        } => {
+                            model.go_to_last_revision();
+                        }
+                        KeyEvent {
+                            code: KeyCode::Down,
+                            ..
+                        }
+                        | KeyEvent {
+                            code: KeyCode::Char('j'),
+                            ..
+                        } => {
+                            model.increment_revision();
+                        }
+                        KeyEvent {
+                            code: KeyCode::Up, ..
+                        }
+                        | KeyEvent {
+                            code: KeyCode::Char('k'),
+                            ..
+                        } => {
+                            model.decrement_revision();
+                        }
+                        _ => {}
+                    }
+                } else if model.app_state == AppState::Details {
+                    match event {
+                        KeyEvent {
+                            code: KeyCode::Char('q'),
+                            ..
+                        } => {
+                            model.app_state = AppState::Finished;
+                        }
+                        KeyEvent {
+                            code: KeyCode::Tab, ..
+                        } => {
+                            // TODO: statemachine for app state progression
+                            model.app_state = AppState::Commits;
+                        }
+                        // Details navigation
+                        KeyEvent {
+                            code: KeyCode::Char('g'),
+                            ..
+                        } => {
+                            model.go_to_first_diff_line();
+                        }
+                        KeyEvent {
+                            code: KeyCode::Char('G'),
+                            ..
+                        } => {
+                            model.go_to_last_diff_line();
+                        }
+                        KeyEvent {
+                            code: KeyCode::Down,
+                            ..
+                        }
+                        | KeyEvent {
+                            code: KeyCode::Char('j'),
+                            ..
+                        } => {
+                            model.increment_diff_line();
+                        }
+                        KeyEvent {
+                            code: KeyCode::Up, ..
+                        }
+                        | KeyEvent {
+                            code: KeyCode::Char('k'),
+                            ..
+                        } => {
+                            model.decrement_diff_line();
+                        }
+
+                        KeyEvent {
+                            code: KeyCode::PageDown,
+                            ..
+                        }
+                        | KeyEvent {
+                            code: KeyCode::Char('f'),
+                            modifiers: KeyModifiers::CONTROL,
+                        } => {
+                            let (_, window_length, _) = model.diff_line_scroll();
+                            for _ in 0..window_length {
+                                model.increment_diff_line();
+                            }
+                        }
+
+                        KeyEvent {
+                            code: KeyCode::PageUp,
+                            ..
+                        }
+                        | KeyEvent {
+                            code: KeyCode::Char('b'),
+                            modifiers: KeyModifiers::CONTROL,
+                        } => {
+                            let (_, window_length, _) = model.diff_line_scroll();
+                            for _ in 0..window_length {
+                                model.decrement_diff_line();
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                // Commit navigation
-                (
-                    AppState::Commits,
-                    KeyEvent {
-                        code: KeyCode::Char('g'),
-                        ..
-                    },
-                ) => {
-                    model.go_to_first_revision();
-                }
-                (
-                    AppState::Commits,
-                    KeyEvent {
-                        code: KeyCode::Char('G'),
-                        ..
-                    },
-                ) => {
-                    model.go_to_last_revision();
-                }
-                (
-                    AppState::Commits,
-                    KeyEvent {
-                        code: KeyCode::Down,
-                        ..
-                    },
-                )
-                | (
-                    AppState::Commits,
-                    KeyEvent {
-                        code: KeyCode::Char('j'),
-                        ..
-                    },
-                ) => {
-                    model.increment_revision();
-                }
-                (
-                    AppState::Commits,
-                    KeyEvent {
-                        code: KeyCode::Up, ..
-                    },
-                )
-                | (
-                    AppState::Commits,
-                    KeyEvent {
-                        code: KeyCode::Char('k'),
-                        ..
-                    },
-                ) => {
-                    model.decrement_revision();
-                }
-                // Details navigation
-                (
-                    AppState::Details,
-                    KeyEvent {
-                        code: KeyCode::Char('g'),
-                        ..
-                    },
-                ) => {
-                    model.go_to_first_diff_line();
-                }
-                (
-                    AppState::Details,
-                    KeyEvent {
-                        code: KeyCode::Char('G'),
-                        ..
-                    },
-                ) => {
-                    model.go_to_last_diff_line();
-                }
-                (
-                    AppState::Details,
-                    KeyEvent {
-                        code: KeyCode::Down,
-                        ..
-                    },
-                )
-                | (
-                    AppState::Details,
-                    KeyEvent {
-                        code: KeyCode::Char('j'),
-                        ..
-                    },
-                ) => {
-                    model.increment_diff_line();
-                }
-                (
-                    AppState::Details,
-                    KeyEvent {
-                        code: KeyCode::Up, ..
-                    },
-                )
-                | (
-                    AppState::Details,
-                    KeyEvent {
-                        code: KeyCode::Char('k'),
-                        ..
-                    },
-                ) => {
-                    model.decrement_diff_line();
-                }
-                (
-                    AppState::Details,
-                    KeyEvent {
-                        code: KeyCode::PageDown,
-                        ..
-                    }
-                    | KeyEvent {
-                        code: KeyCode::Char('f'),
-                        modifiers: KeyModifiers::CONTROL,
-                    },
-                ) => {
-                    let (_, window_length, _) = model.diff_line_scroll();
-                    for _ in 0..window_length {
-                        model.increment_diff_line();
-                    }
-                }
-                (
-                    AppState::Details,
-                    KeyEvent {
-                        code: KeyCode::PageUp,
-                        ..
-                    }
-                    | KeyEvent {
-                        code: KeyCode::Char('b'),
-                        modifiers: KeyModifiers::CONTROL,
-                    },
-                ) => {
-                    let (_, window_length, _) = model.diff_line_scroll();
-                    for _ in 0..window_length {
-                        model.decrement_diff_line();
-                    }
-                }
-                _ => {}
-            },
+            }
             Event::Failure => {
                 model.app_state = crate::model::AppState::Finished;
             }
