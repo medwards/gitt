@@ -1,10 +1,8 @@
 [package]
 name = "gitt"
 version = "0.1.0"
-authors = ["Michael Edwards <medwards@walledcity.ca>", "Alvaro Mouriño <alvaro@mourino.net>"]
+authors = ["Michael Edwards <medwards@walledcity.ca>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 git2 = "0.13"
