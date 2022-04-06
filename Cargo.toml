@@ -11,3 +11,5 @@ tui = { version = "0.16", default-features = false, features = ['crossterm'] }
 cassowary = "0.3"  # keep this in sync /w tui?
 clap = { version = "3.1.0" }
 chrono = "0.4.19"
+terminal-clipboard = "0.3.1"
+anyhow = "1.0.56"

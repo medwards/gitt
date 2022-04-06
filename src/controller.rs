@@ -58,7 +58,7 @@ impl EventHandler {
         }
     }
 
-    pub fn update_model(&mut self, model: &mut AppModel) -> Result<(), RecvError> {
+    pub fn update_model(&mut self, model: &mut AppModel) -> anyhow::Result<()> {
         match self.receiver.recv()? {
             Event::Input(event) => {
                 if model.app_state == AppState::Commits {
@@ -75,6 +75,11 @@ impl EventHandler {
                             // TODO: statemachine for app state progression
                             model.app_state = AppState::Details;
                         }
+                        KeyEvent {
+                            code: KeyCode::Char('y'),
+                            ..
+                        } => terminal_clipboard::set_string(model.commit().id().to_string())
+                            .map_err(|e| anyhow::Error::msg(e.to_string()))?,
                         // Commit navigation
                         KeyEvent {
                             code: KeyCode::Char('g'),
@@ -123,6 +128,11 @@ impl EventHandler {
                             // TODO: statemachine for app state progression
                             model.app_state = AppState::Commits;
                         }
+                        KeyEvent {
+                            code: KeyCode::Char('y'),
+                            ..
+                        } => terminal_clipboard::set_string(model.commit().id().to_string())
+                            .map_err(|e| anyhow::Error::msg(e.to_string()))?,
                         // Details navigation
                         KeyEvent {
                             code: KeyCode::Char('g'),
