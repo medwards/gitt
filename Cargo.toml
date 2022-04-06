@@ -1,7 +1,13 @@
 [package]
 name = "gitt"
-version = "0.1.0"
 authors = ["Michael Edwards <medwards@walledcity.ca>"]
+version = "0.1.0"
+description = "gitk but in your terminal"
+repository = "https://github.com/medwards/gitt"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+categories = ["command-line-utilities"]
+keywords = ["git", "terminal", "ui"]
 edition = "2018"
 
 [dependencies]
