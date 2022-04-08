@@ -48,6 +48,53 @@ impl CommitFilter {
     }
 }
 
+pub struct PositionedCommitView<'a> {
+    repository: &'a Repository,
+    revision: Option<&'a String>,
+    filters: &'a Vec<CommitFilter>,
+    cache: &'a mut Vec<Oid>,
+    index: usize,
+}
+
+impl<'a> PositionedCommitView<'a> {
+    pub fn new(
+        repository: &'a Repository,
+        revision: Option<&'a String>,
+        filters: &'a Vec<CommitFilter>,
+        cache: &'a mut Vec<Oid>,
+    ) -> Self {
+        Self {
+            repository,
+            revision,
+            filters,
+            cache,
+            index: 0,
+        }
+    }
+
+    pub fn position(&mut self, index: usize) {
+        self.index = index;
+    }
+}
+
+impl<'a> Iterator for PositionedCommitView<'a> {
+    type Item = Commit<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.cache.len() {
+            let oid = self.cache[self.index];
+            return Some(self.repository.find_commit(oid).expect("commit to exist"));
+        }
+
+        let view = CommitView::new(self.repository, self.revision, self.filters);
+        self.index += 1;
+        let res = view.skip(self.index).next();
+        if let Some(ref commit) = res {
+            self.cache.push(commit.id());
+        }
+        res
+    }
+}
+
 pub struct CommitView<'a> {
     repository: &'a Repository,
     filters: &'a Vec<CommitFilter>,
@@ -93,6 +140,8 @@ impl<'a> Iterator for CommitView<'a> {
     type Item = Commit<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.walker.next() {
+            // TODO: we can apply the ID filter earlier! (but maybe doesn't help if we have a
+            // caching iterator
             Some(oid) => self
                 .repository
                 .find_commit(oid.expect("Revwalk unable to get oid"))
@@ -121,6 +170,7 @@ pub struct AppModel {
     repository: Repository,
     revspec: Option<String>,
     filters: Vec<CommitFilter>,
+    cache: Vec<Oid>,
     revision_index: usize,
     revision_window_index: TableState,
     revision_window_length: usize,
@@ -142,6 +192,7 @@ impl AppModel {
             repository,
             revspec: None,
             filters,
+            cache: Vec::new(),
             revision_index: 0,
             revision_window_index: TableState::default(),
             revision_window_length: 0,
@@ -175,24 +226,23 @@ impl AppModel {
     }
 
     // Returns commits from revision_index to revision_index + revision_window_length
-    pub fn commits(&self) -> Vec<Commit> {
-        self.walker()
-            .skip(self.revision_index)
-            .take(self.revision_window_length)
-            .collect()
+    pub fn commits(&mut self) -> Vec<Commit> {
+        let commits = self.revision_window_length;
+        self.walker().take(commits).collect()
     }
 
-    pub fn commit(&self) -> Commit {
+    pub fn commit(&mut self) -> Commit {
         // TODO: reuse commits?
         // TODO: could be empty (or nth goes off the edge of the iterator)
+        let commit = self.revision_window_index.selected().unwrap_or(0);
         self.walker()
-            .skip(self.revision_index)
-            .nth(self.revision_window_index.selected().unwrap_or(0))
+            .nth(commit)
             .expect("Unexpected missing commit")
     }
 
-    pub fn diff(&self) -> Vec<Spans> {
+    pub fn diff(&mut self) -> Vec<Spans> {
         let commit = self.commit();
+        let good_self = &*self;
         let mut text = vec![Spans::from(vec![
             Span::raw(
                 commit
@@ -265,8 +315,15 @@ impl AppModel {
         text
     }
 
-    fn walker(&self) -> CommitView {
-        CommitView::new(&self.repository, self.revspec.as_ref(), &self.filters)
+    fn walker(&mut self) -> PositionedCommitView {
+        let mut view = PositionedCommitView::new(
+            &self.repository,
+            self.revspec.as_ref(),
+            &self.filters,
+            &mut self.cache,
+        );
+        view.position(self.revision_index);
+        view
     }
 
     pub fn revision_index(&self) -> usize {
@@ -279,7 +336,7 @@ impl AppModel {
     pub fn resize_revision_window(&mut self, length: usize) {
         assert!(self.revision_window_index.selected().unwrap_or(0) <= length);
         // TODO: just set the length and then check the count with self.commits().count()
-        let commit_count = self.walker().skip(self.revision_index).take(length).count();
+        let commit_count = self.walker().take(length).count();
         // If there are not enough commits to fill the window, shrink it
         // This can happen if there are very few commits in the repository, or the window was
         // resized to be larger after scrolling to near the end of the list of commits
