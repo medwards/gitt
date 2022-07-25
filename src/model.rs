@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 use git2::{Commit, Oid, Repository};
 use tui::style::{Color, Style};
@@ -27,6 +27,7 @@ impl CommitFilter {
                 if tree_diff.contains(&commit.id()) {
                     return false;
                 }
+                /*
                 let tree = commit.tree().ok();
                 let parent_tree = commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
                 let diff = repository
@@ -45,6 +46,8 @@ impl CommitFilter {
                         .unwrap_or(false);
                     old_file_matches || new_file_matches
                 })
+                */
+                true
             }
             Self::Ids(oids) => oids.contains(&commit.id()),
             _ => unimplemented!(),
@@ -228,7 +231,19 @@ impl AppModel {
                 .repository
                 .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
                 .expect("Unable to create diff");
-            diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+            let paths: Vec<PathBuf> = self.filters.iter().flat_map(|filter| if let CommitFilter::Path((path, _oids)) = filter {
+                Some(path.clone())
+            } else {
+                None
+            }).collect();
+
+            diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
+                // TODO: deal with optional file paths correctly
+                if !(paths.iter().any(|path| delta.old_file().path().unwrap().starts_with(path) || delta.new_file().path().unwrap().starts_with(path))) {
+                    // TODO: print a message indicating the path was filtered
+                    return true;
+                }
+
                 let (origin, style) = match line.origin() {
                     'F' => {
                         text.append(
