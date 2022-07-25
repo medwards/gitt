@@ -73,7 +73,7 @@ impl<'a> CommitView<'a> {
                 let oid = result.as_ref().copied().expect("blah");
                 repository
                     .find_commit(oid)
-                    .and_then(|commit| Ok(filters.iter().any(|filter| filter.apply(&commit))))
+                    .map(|commit| filters.iter().any(|filter| filter.apply(&commit)))
                     .unwrap_or(false)
             }))
         };
@@ -195,15 +195,15 @@ impl AppModel {
         text.append(
             &mut commit
                 .message()
-                .unwrap_or_else(|| "INVALID MESSAGE")
-                .split("\n")
+                .unwrap_or("INVALID MESSAGE")
+                .split('\n')
                 .map(|s| s.trim_end().to_string())
                 .map(|s| Spans::from(vec![Span::raw(s)]))
                 .collect(),
         );
 
         if commit.parents().len() <= 1 {
-            let parent_tree = commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
+            let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
             let diff = self
                 .repository
                 .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
@@ -254,7 +254,7 @@ impl AppModel {
                         text.append(
                             &mut std::str::from_utf8(line.content())
                                 .unwrap()
-                                .split("\n")
+                                .split('\n')
                                 .map(|s| s.trim_end().to_string())
                                 .map(|s| {
                                     Spans::from(vec![Span::styled(
@@ -357,7 +357,7 @@ impl AppModel {
             && self.revision_index < self.revision_max - self.revision_window_length
         {
             // Increment the entire window
-            self.revision_index = self.revision_index + 1;
+            self.revision_index += 1;
         }
         self.diff_reset();
     }
@@ -401,7 +401,7 @@ impl AppModel {
 
     pub fn increment_diff_line(&mut self) {
         if self.diff_index < self.diff_length.saturating_sub(self.diff_window_length) {
-            self.diff_index = self.diff_index + 1;
+            self.diff_index += 1;
         }
     }
 

@@ -16,8 +16,8 @@ impl Event<KeyEvent> {
     pub fn listen(timeout: Duration) -> Result<Option<Self>, String> {
         if poll(timeout).map_err(|e| e.to_string())? {
             match read().map_err(|e| e.to_string())? {
-                CrosstermEvent::Key(key) => return Ok(Some(Event::Input(key))),
-                CrosstermEvent::Resize(_columns, rows) => return Ok(Some(Event::Resize(rows))),
+                CrosstermEvent::Key(key) => Ok(Some(Event::Input(key))),
+                CrosstermEvent::Resize(_columns, rows) => Ok(Some(Event::Resize(rows))),
                 _ => Ok(None),
             }
         } else {
@@ -42,7 +42,7 @@ pub fn event_receiver(tick_rate: Duration) -> Receiver<Event<KeyEvent>> {
             }
 
             if last_tick.elapsed() >= tick_rate {
-                if let Ok(_) = tx.send(Event::Tick) {
+                if tx.send(Event::Tick).is_ok() {
                     last_tick = std::time::Instant::now();
                 }
             }

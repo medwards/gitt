@@ -49,25 +49,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .walker()
                         .flat_map(|commit| {
                             let tree = commit.tree().ok();
-                            let parent_tree =
-                                commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
+                            let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
 
-                            let parent_path_tree = parent_tree
-                                .as_ref()
-                                .map(|t| {
-                                    path.parent()
-                                        .map(|p| t.get_path(p).ok().map(|t_p| t_p.id()))
-                                        .flatten()
-                                })
-                                .flatten();
-                            let path_tree = tree
-                                .as_ref()
-                                .map(|t| {
-                                    path.parent()
-                                        .map(|p| t.get_path(p).ok().map(|t_p| t_p.id()))
-                                        .flatten()
-                                })
-                                .flatten();
+                            let parent_path_tree = parent_tree.as_ref().and_then(|t| {
+                                path.parent()
+                                    .and_then(|p| t.get_path(p).ok().map(|t_p| t_p.id()))
+                            });
+                            let path_tree = tree.as_ref().and_then(|t| {
+                                path.parent()
+                                    .and_then(|p| t.get_path(p).ok().map(|t_p| t_p.id()))
+                            });
                             // If the tree ids are the same then they must not match
                             if path_tree != None && parent_path_tree == path_tree {
                                 Some(commit.id())
@@ -100,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 })
                 .collect()
         })
-        .unwrap_or_else(|| Vec::new());
+        .unwrap_or_else(Vec::new);
 
     let mut app_model =
         model::AppModel::new(model::AppState::Commits, repository, revision, filters)?;
@@ -229,9 +220,9 @@ fn commit_list_item(commit: &git2::Commit) -> tui::widgets::Row<'static> {
     // TODO: If this needs to be length limited include unicode_segmentation
     let title = commit
         .message()
-        .unwrap_or_else(|| "INVALID UTF8 IN COMMIT MESSAGE")
-        .split("\n")
-        .nth(0)
+        .unwrap_or("INVALID UTF8 IN COMMIT MESSAGE")
+        .split('\n')
+        .next()
         .expect("message body was bad")
         .to_owned();
     let author = commit.author().to_string();
