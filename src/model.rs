@@ -219,11 +219,20 @@ impl AppModel {
                 .repository
                 .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
                 .expect("Unable to create diff");
-            let paths: Vec<PathBuf> = self.filters.iter().flat_map(|filter| if let CommitFilter::Path((path, _oids)) = filter {
-                Some(path.clone())
-            } else {
-                None
-            }).collect();
+
+            let paths: Vec<PathBuf> = self
+                .filters
+                .iter()
+                .flat_map(|filter| {
+                    if let CommitFilter::Path((path, _oids)) = filter {
+                        Some(path.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            let mut excluded: HashSet<String> = HashSet::new();
 
             diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
                 if !paths.is_empty()
@@ -232,6 +241,22 @@ impl AppModel {
                             || diff_file_starts_with(&delta.new_file(), path)
                     }))
                 {
+                    delta
+                        .old_file()
+                        .path()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .into_iter()
+                        .for_each(|s| {
+                            let _ = excluded.insert(s);
+                        });
+                    delta
+                        .new_file()
+                        .path()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .into_iter()
+                        .for_each(|s| {
+                            let _ = excluded.insert(s);
+                        });
                     return true;
                 }
 
@@ -273,7 +298,29 @@ impl AppModel {
                 true
             })
             .expect("Unable to format diff");
+
+            if !excluded.is_empty() {
+                let spans = vec![
+                    Span::styled("".to_string(), Style::default()),
+                    Span::styled("diff hidden:", Style::default().fg(Color::Gray)),
+                ];
+
+                let mut excluded: Vec<_> = excluded.into_iter().collect();
+                excluded.sort();
+
+                let mut spans: Vec<Spans> = spans
+                    .into_iter()
+                    .chain(
+                        excluded
+                            .into_iter()
+                            .map(|path| Span::styled(path, Style::default().fg(Color::Gray))),
+                    )
+                    .map(|span| Spans::from(vec![span]))
+                    .collect();
+                text.append(&mut spans);
+            }
         }
+
         text
     }
 
