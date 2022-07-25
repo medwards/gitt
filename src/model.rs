@@ -1,7 +1,7 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use git2::{Commit, Oid, Repository};
+use git2::{Commit, DiffFile, Oid, Repository};
 use tui::style::{Color, Style};
 use tui::text::{Span, Spans};
 use tui::widgets::TableState;
@@ -15,7 +15,7 @@ pub enum AppState {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum CommitFilter {
-    Path(PathBuf),
+    Path((PathBuf, HashSet<Oid>)),
     Ids(HashSet<Oid>),
     Text(String), // TODO: author? time?
 }
@@ -23,24 +23,11 @@ pub enum CommitFilter {
 impl CommitFilter {
     pub fn apply<'a>(&self, commit: &'a Commit<'a>, repository: &'a Repository) -> bool {
         match self {
-            Self::Path(path_match) => {
-                let parent_tree = commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
-                let diff = repository
-                    .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
-                    .expect("Unable to create diff");
-                diff.deltas().any(|delta| {
-                    let old_file_matches = delta
-                        .old_file()
-                        .path()
-                        .map(|p| p.starts_with(path_match))
-                        .unwrap_or(false);
-                    let new_file_matches = delta
-                        .new_file()
-                        .path()
-                        .map(|p| p.starts_with(path_match))
-                        .unwrap_or(false);
-                    old_file_matches || new_file_matches
-                })
+            Self::Path((path_match, tree_diff)) => {
+                if tree_diff.contains(&commit.id()) {
+                    return false;
+                }
+                true
             }
             Self::Ids(oids) => oids.contains(&commit.id()),
             _ => unimplemented!(),
@@ -50,15 +37,15 @@ impl CommitFilter {
 
 pub struct CommitView<'a> {
     repository: &'a Repository,
-    filters: &'a Vec<CommitFilter>,
-    walker: git2::Revwalk<'a>,
+    filters: &'a [CommitFilter],
+    walker: Box<dyn Iterator<Item = Result<Oid, git2::Error>> + 'a>,
 }
 
 impl<'a> CommitView<'a> {
     pub fn new(
         repository: &'a Repository,
         revision: Option<&String>,
-        filters: &'a Vec<CommitFilter>,
+        filters: &'a [CommitFilter],
     ) -> Self {
         let revision = revision.map(|revspec| {
             repository
@@ -66,7 +53,8 @@ impl<'a> CommitView<'a> {
                 .expect("Invalid revision specifier")
         });
 
-        let mut walker = repository.revwalk().expect("Unable to initialize revwalk");
+        let mut walker: git2::Revwalk<'a> =
+            repository.revwalk().expect("Unable to initialize revwalk");
         if let Some(rev) = revision.as_ref() {
             walker
                 .push(
@@ -80,6 +68,22 @@ impl<'a> CommitView<'a> {
                 .push_head()
                 .expect("Unable to push head onto revwalk");
         }
+
+        let walker: Box<dyn Iterator<Item = Result<Oid, git2::Error>>> = if filters.is_empty() {
+            Box::new(walker)
+        } else {
+            Box::new(walker.filter(move |result| {
+                let oid = result.as_ref().copied().expect("blah");
+                repository
+                    .find_commit(oid)
+                    .and_then(|commit| {
+                        Ok(filters
+                            .iter()
+                            .any(|filter| filter.apply(&commit, repository)))
+                    })
+                    .unwrap_or(false)
+            }))
+        };
 
         Self {
             repository,
@@ -96,24 +100,17 @@ impl<'a> Iterator for CommitView<'a> {
             Some(oid) => self
                 .repository
                 .find_commit(oid.expect("Revwalk unable to get oid"))
-                .and_then(|commit| {
-                    if self.filters.is_empty()
-                        || self
-                            .filters
-                            .iter()
-                            .any(|filter| filter.apply(&commit, self.repository))
-                    {
-                        Ok(commit)
-                    } else {
-                        // TODO: get rid of recursion if possible
-                        self.next()
-                            .ok_or_else(|| git2::Error::from_str("Unable to find matching commits"))
-                    }
-                })
                 .ok(),
             None => None,
         }
     }
+}
+
+pub fn diff_file_starts_with(diff_file: &DiffFile, path: &Path) -> bool {
+    diff_file
+        .path()
+        .map(|p| p.starts_with(path))
+        .unwrap_or(false)
 }
 
 pub struct AppModel {
@@ -222,7 +219,47 @@ impl AppModel {
                 .repository
                 .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
                 .expect("Unable to create diff");
-            diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+
+            let paths: Vec<PathBuf> = self
+                .filters
+                .iter()
+                .flat_map(|filter| {
+                    if let CommitFilter::Path((path, _oids)) = filter {
+                        Some(path.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            let mut excluded: HashSet<String> = HashSet::new();
+
+            diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
+                if !paths.is_empty()
+                    && !(paths.iter().any(|path| {
+                        diff_file_starts_with(&delta.old_file(), path)
+                            || diff_file_starts_with(&delta.new_file(), path)
+                    }))
+                {
+                    delta
+                        .old_file()
+                        .path()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .into_iter()
+                        .for_each(|s| {
+                            let _ = excluded.insert(s);
+                        });
+                    delta
+                        .new_file()
+                        .path()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .into_iter()
+                        .for_each(|s| {
+                            let _ = excluded.insert(s);
+                        });
+                    return true;
+                }
+
                 let (origin, style) = match line.origin() {
                     'F' => {
                         text.append(
@@ -261,11 +298,33 @@ impl AppModel {
                 true
             })
             .expect("Unable to format diff");
+
+            if !excluded.is_empty() {
+                let spans = vec![
+                    Span::styled("".to_string(), Style::default()),
+                    Span::styled("diff hidden:", Style::default().fg(Color::Gray)),
+                ];
+
+                let mut excluded: Vec<_> = excluded.into_iter().collect();
+                excluded.sort();
+
+                let mut spans: Vec<Spans> = spans
+                    .into_iter()
+                    .chain(
+                        excluded
+                            .into_iter()
+                            .map(|path| Span::styled(path, Style::default().fg(Color::Gray))),
+                    )
+                    .map(|span| Spans::from(vec![span]))
+                    .collect();
+                text.append(&mut spans);
+            }
         }
+
         text
     }
 
-    fn walker(&self) -> CommitView {
+    pub fn walker(&self) -> CommitView {
         CommitView::new(&self.repository, self.revspec.as_ref(), &self.filters)
     }
 
