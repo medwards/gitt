@@ -334,6 +334,13 @@ impl AppModel {
         self.diff_window_length = window_length;
     }
 
+    pub fn saturating_resize_diff_window(&mut self, window_length: usize) {
+        if self.diff_index + window_length > self.diff_length {
+            self.diff_index = self.diff_length.saturating_sub(window_length);
+        }
+        self.diff_window_length = window_length;
+    }
+
     pub fn diff_line_scroll(&self) -> (usize, usize, usize) {
         (self.diff_index, self.diff_window_length, self.diff_length)
     }
