@@ -7,13 +7,9 @@ use std::{
 };
 
 mod controller;
+mod instrument;
 mod model;
 mod widgets;
-
-struct Timing {
-    index: usize,
-    duration: Duration,
-}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
@@ -73,15 +69,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("gitt startup took: {:?}", start_time.elapsed());
     }
 
-    let mut peak_draw = Timing {
-        index: 0,
-        duration: Duration::from_millis(0),
-    };
-
-    let mut peak_update = Timing {
-        index: 0,
-        duration: Duration::from_millis(0),
-    };
+    let mut peak_draw = instrument::Timing::new("peak draw time".to_string());
+    let mut peak_update = instrument::Timing::new("peak update time".to_string());
 
     // TODO: use RAII for this somehow
     crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
@@ -166,7 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             rect.render_widget(details_scroll, chunk_details_scroll);
         })?;
 
-        record_peak_timing(draw_start, &mut peak_draw, &app_model);
+        peak_draw.record_max(draw_start, app_model.revision_index());
 
         let update_start = Instant::now();
         if handler.update_model(&mut app_model).is_err()
@@ -177,19 +166,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
             if is_verbose {
                 println!("Quitting at index {}", app_model.revision_index());
-                println!(
-                    "Peak draw time was {:?} at index {}",
-                    peak_draw.duration, peak_draw.index
-                );
-                println!(
-                    "Peak update time was {:?} at index {}",
-                    peak_update.duration, peak_update.index
-                );
+                println!("{}", peak_draw);
+                println!("{}", peak_update);
             }
             break;
         }
 
-        record_peak_timing(update_start, &mut peak_update, &app_model);
+        peak_update.record_max(update_start, app_model.revision_index());
     }
     Ok(())
 }
@@ -213,14 +196,6 @@ fn format_time(time: &git2::Time) -> String {
         .expect("timezone offset was too big");
     let dt = tz.timestamp(time.seconds(), 0);
     dt.to_rfc3339()
-}
-
-fn record_peak_timing(instant: Instant, peak_timing: &mut Timing, app_model: &model::AppModel) {
-    let update_duration = instant.elapsed();
-    if peak_timing.duration < update_duration {
-        peak_timing.duration = update_duration;
-        peak_timing.index = app_model.revision_index();
-    }
 }
 
 fn app_args() -> clap::Command<'static> {
