@@ -13,23 +13,21 @@ pub enum AppState {
     Finished,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum CommitFilter {
     Path((PathBuf, HashSet<Oid>)),
-    Ids(HashSet<Oid>),
     Text(String), // TODO: author? time?
 }
 
 impl CommitFilter {
-    pub fn apply<'a>(&self, commit: &'a Commit<'a>, repository: &'a Repository) -> bool {
+    pub fn apply<'a>(&self, commit: &'a Commit<'a>) -> bool {
         match self {
-            Self::Path((path_match, tree_diff)) => {
-                if tree_diff.contains(&commit.id()) {
+            Self::Path((_path, filtered_oids)) => {
+                if filtered_oids.contains(&commit.id()) {
                     return false;
                 }
                 true
             }
-            Self::Ids(oids) => oids.contains(&commit.id()),
             _ => unimplemented!(),
         }
     }
@@ -37,7 +35,6 @@ impl CommitFilter {
 
 pub struct CommitView<'a> {
     repository: &'a Repository,
-    filters: &'a [CommitFilter],
     walker: Box<dyn Iterator<Item = Result<Oid, git2::Error>> + 'a>,
 }
 
@@ -76,20 +73,12 @@ impl<'a> CommitView<'a> {
                 let oid = result.as_ref().copied().expect("blah");
                 repository
                     .find_commit(oid)
-                    .and_then(|commit| {
-                        Ok(filters
-                            .iter()
-                            .any(|filter| filter.apply(&commit, repository)))
-                    })
+                    .and_then(|commit| Ok(filters.iter().any(|filter| filter.apply(&commit))))
                     .unwrap_or(false)
             }))
         };
 
-        Self {
-            repository,
-            filters,
-            walker,
-        }
+        Self { repository, walker }
     }
 }
 
@@ -390,10 +379,8 @@ impl AppModel {
     }
 
     pub fn resize_diff_window(&mut self, window_length: usize) {
-        self.diff_window_length = window_length;
-    }
-
-    pub fn saturating_resize_diff_window(&mut self, window_length: usize) {
+        // the diff_index + window_length can exceed the diff_length when the diff is scrolled
+        // using a small window, and then the window is expanded
         if self.diff_index + window_length > self.diff_length {
             self.diff_index = self.diff_length.saturating_sub(window_length);
         }

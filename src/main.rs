@@ -1,10 +1,5 @@
 use chrono::offset::TimeZone;
-use std::{
-    collections::HashSet,
-    path::Path,
-    str::FromStr,
-    time::{Duration, Instant},
-};
+use std::{collections::HashSet, path::Path, str::FromStr, time::Instant};
 
 mod controller;
 mod instrument;
@@ -169,9 +164,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             app_model.resize_revision_window(commits_block.inner(chunk_commit).height as usize);
             let commit_items: Vec<_> = app_model.commits().iter().map(commit_list_item).collect();
 
-            app_model.saturating_resize_diff_window(
-                details_block.inner(chunk_details_pane).height as usize,
-            );
+            app_model.resize_diff_window(details_block.inner(chunk_details_pane).height as usize);
 
             // TODO: https://github.com/fdehau/tui-rs/issues/499
             column_solver
