@@ -1,7 +1,7 @@
 [package]
 name = "gitt"
 authors = ["Michael Edwards <medwards@walledcity.ca>"]
-version = "0.2.0"
+version = "0.2.1"
 description = "gitk but in your terminal"
 repository = "https://github.com/medwards/gitt"
 license = "GPL-3.0-or-later"
