@@ -7,6 +7,7 @@ use crate::model::{AppModel, AppState};
 
 pub enum Event<I> {
     Input(I),
+    Resize(u16),
     Failure,
     Tick,
 }
@@ -14,11 +15,14 @@ pub enum Event<I> {
 impl Event<KeyEvent> {
     pub fn listen(timeout: Duration) -> Result<Option<Self>, String> {
         if poll(timeout).map_err(|e| e.to_string())? {
-            if let CrosstermEvent::Key(key) = read().map_err(|e| e.to_string())? {
-                return Ok(Some(Event::Input(key)));
+            match read().map_err(|e| e.to_string())? {
+                CrosstermEvent::Key(key) => return Ok(Some(Event::Input(key))),
+                CrosstermEvent::Resize(_columns, rows) => return Ok(Some(Event::Resize(rows))),
+                _ => Ok(None),
             }
+        } else {
+            Ok(None)
         }
-        Ok(None)
     }
 }
 
@@ -188,6 +192,7 @@ impl EventHandler {
                         }
                     }
                 }
+                Event::Resize(_rows) => {} // Let the drawing code handle this
                 Event::Failure => {
                     model.app_state = crate::model::AppState::Finished;
                 }
