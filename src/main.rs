@@ -29,30 +29,75 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Missing value AND default for working-directory")?;
     let revision = matches.value_of("COMMITTISH").map(|s| s.to_string());
 
+    let repository = git2::Repository::discover(&repository_dir)?;
+
     let filters: Vec<_> = matches
         .values_of("path")
         .map(|paths| {
             paths
                 .map(|path| {
                     let path = Path::new(path).to_path_buf();
-                    model::CommitFilter::Path(path)
+
+                    let repository = git2::Repository::discover(&repository_dir).unwrap();
+                    let model = model::AppModel::new(
+                        model::AppState::Commits,
+                        repository,
+                        revision.clone(),
+                        Vec::new(),
+                    )
+                    .unwrap();
+
+                    let ids: HashSet<git2::Oid> = model
+                        .walker()
+                        .flat_map(|commit| {
+                            let tree = commit.tree().ok();
+                            let parent_tree =
+                                commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
+
+                            let parent_path_tree = parent_tree
+                                .as_ref()
+                                .map(|t| {
+                                    path.parent()
+                                        .map(|p| t.get_path(p).ok().map(|t_p| t_p.id()))
+                                        .flatten()
+                                })
+                                .flatten();
+                            let path_tree = tree
+                                .as_ref()
+                                .map(|t| {
+                                    path.parent()
+                                        .map(|p| t.get_path(p).ok().map(|t_p| t_p.id()))
+                                        .flatten()
+                                })
+                                .flatten();
+                            // If the tree ids are the same then they must not match
+                            if path_tree != None && parent_path_tree == path_tree {
+                                Some(commit.id())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    model::CommitFilter::Path((path, ids))
                 })
                 .collect()
         })
         .unwrap_or_else(|| Vec::new());
 
-    let repository = git2::Repository::discover(&repository_dir)?;
-
     let mut app_model = if !filters.is_empty() {
+        /*
         let oids: HashSet<_> = model::CommitView::new(&repository, revision.as_ref(), &filters)
             .map(|c| c.id())
             .collect();
+        */
 
         model::AppModel::new(
             model::AppState::Commits,
             repository,
             revision,
-            vec![model::CommitFilter::Ids(oids)],
+            filters,
+            //vec![model::CommitFilter::Ids(oids)],
         )?
     } else {
         model::AppModel::new(model::AppState::Commits, repository, revision, filters)?

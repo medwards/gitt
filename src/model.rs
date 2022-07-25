@@ -15,7 +15,7 @@ pub enum AppState {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum CommitFilter {
-    Path(PathBuf),
+    Path((PathBuf, HashSet<Oid>)),
     Ids(HashSet<Oid>),
     Text(String), // TODO: author? time?
 }
@@ -23,10 +23,14 @@ pub enum CommitFilter {
 impl CommitFilter {
     pub fn apply<'a>(&self, commit: &'a Commit<'a>, repository: &'a Repository) -> bool {
         match self {
-            Self::Path(path_match) => {
+            Self::Path((path_match, tree_diff)) => {
+                if tree_diff.contains(&commit.id()) {
+                    return false;
+                }
+                let tree = commit.tree().ok();
                 let parent_tree = commit.parent(0).ok().map(|p| p.tree().ok()).flatten();
                 let diff = repository
-                    .diff_tree_to_tree(parent_tree.as_ref(), commit.tree().ok().as_ref(), None)
+                    .diff_tree_to_tree(parent_tree.as_ref(), tree.as_ref(), None)
                     .expect("Unable to create diff");
                 diff.deltas().any(|delta| {
                     let old_file_matches = delta
@@ -50,15 +54,15 @@ impl CommitFilter {
 
 pub struct CommitView<'a> {
     repository: &'a Repository,
-    filters: &'a Vec<CommitFilter>,
-    walker: git2::Revwalk<'a>,
+    filters: &'a [CommitFilter],
+    walker: Box<dyn Iterator<Item = Result<Oid, git2::Error>> + 'a>,
 }
 
 impl<'a> CommitView<'a> {
     pub fn new(
         repository: &'a Repository,
         revision: Option<&String>,
-        filters: &'a Vec<CommitFilter>,
+        filters: &'a [CommitFilter],
     ) -> Self {
         let revision = revision.map(|revspec| {
             repository
@@ -66,7 +70,8 @@ impl<'a> CommitView<'a> {
                 .expect("Invalid revision specifier")
         });
 
-        let mut walker = repository.revwalk().expect("Unable to initialize revwalk");
+        let mut walker: git2::Revwalk<'a> =
+            repository.revwalk().expect("Unable to initialize revwalk");
         if let Some(rev) = revision.as_ref() {
             walker
                 .push(
@@ -80,6 +85,22 @@ impl<'a> CommitView<'a> {
                 .push_head()
                 .expect("Unable to push head onto revwalk");
         }
+
+        let walker: Box<dyn Iterator<Item = Result<Oid, git2::Error>>> = if filters.is_empty() {
+            Box::new(walker)
+        } else {
+            Box::new(walker.filter(move |result| {
+                let oid = result.as_ref().copied().expect("blah");
+                repository
+                    .find_commit(oid)
+                    .and_then(|commit| {
+                        Ok(filters
+                            .iter()
+                            .any(|filter| filter.apply(&commit, repository)))
+                    })
+                    .unwrap_or(false)
+            }))
+        };
 
         Self {
             repository,
@@ -96,26 +117,11 @@ impl<'a> Iterator for CommitView<'a> {
             Some(oid) => self
                 .repository
                 .find_commit(oid.expect("Revwalk unable to get oid"))
-                .and_then(|commit| {
-                    if self.filters.is_empty()
-                        || self
-                            .filters
-                            .iter()
-                            .any(|filter| filter.apply(&commit, self.repository))
-                    {
-                        Ok(commit)
-                    } else {
-                        // TODO: get rid of recursion if possible
-                        self.next()
-                            .ok_or_else(|| git2::Error::from_str("Unable to find matching commits"))
-                    }
-                })
                 .ok(),
             None => None,
         }
     }
 }
-
 pub struct AppModel {
     pub app_state: AppState,
     repository: Repository,
@@ -265,7 +271,7 @@ impl AppModel {
         text
     }
 
-    fn walker(&self) -> CommitView {
+    pub fn walker(&self) -> CommitView {
         CommitView::new(&self.repository, self.revspec.as_ref(), &self.filters)
     }
 
