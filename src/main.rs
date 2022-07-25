@@ -81,16 +81,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     .diff_tree_to_tree(parent_tree.as_ref(), tree.as_ref(), None)
                                     .expect("Unable to create diff");
                                 let matches = diff.deltas().any(|delta| {
-                                    let old_file_matches = delta
-                                        .old_file()
-                                        .path()
-                                        .map(|p| p.starts_with(path.as_path()))
-                                        .unwrap_or(false);
-                                    let new_file_matches = delta
-                                        .new_file()
-                                        .path()
-                                        .map(|p| p.starts_with(path.as_path()))
-                                        .unwrap_or(false);
+                                    let old_file_matches = model::diff_file_starts_with(
+                                        &delta.old_file(),
+                                        path.as_path(),
+                                    );
+                                    let new_file_matches = model::diff_file_starts_with(
+                                        &delta.new_file(),
+                                        path.as_path(),
+                                    );
                                     old_file_matches || new_file_matches
                                 });
 

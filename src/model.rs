@@ -1,7 +1,7 @@
 use std::collections::HashSet;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
-use git2::{Commit, Oid, Repository};
+use git2::{Commit, DiffFile, Oid, Repository};
 use tui::style::{Color, Style};
 use tui::text::{Span, Spans};
 use tui::widgets::TableState;
@@ -105,6 +105,14 @@ impl<'a> Iterator for CommitView<'a> {
         }
     }
 }
+
+pub fn diff_file_starts_with(diff_file: &DiffFile, path: &Path) -> bool {
+    diff_file
+        .path()
+        .map(|p| p.starts_with(path))
+        .unwrap_or(false)
+}
+
 pub struct AppModel {
     pub app_state: AppState,
     repository: Repository,
@@ -218,9 +226,12 @@ impl AppModel {
             }).collect();
 
             diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
-                // TODO: deal with optional file paths correctly
-                if !(paths.iter().any(|path| delta.old_file().path().unwrap().starts_with(path) || delta.new_file().path().unwrap().starts_with(path))) {
-                    // TODO: print a message indicating the path was filtered
+                if !paths.is_empty()
+                    && !(paths.iter().any(|path| {
+                        diff_file_starts_with(&delta.old_file(), path)
+                            || diff_file_starts_with(&delta.new_file(), path)
+                    }))
+                {
                     return true;
                 }
 
