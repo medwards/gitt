@@ -47,6 +47,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     )
                     .unwrap();
 
+                    let repository = git2::Repository::discover(&repository_dir).unwrap();
+
                     let ids: HashSet<git2::Oid> = model
                         .walker()
                         .flat_map(|commit| {
@@ -74,7 +76,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if path_tree != None && parent_path_tree == path_tree {
                                 Some(commit.id())
                             } else {
-                                None
+                                let diff = repository
+                                    .diff_tree_to_tree(parent_tree.as_ref(), tree.as_ref(), None)
+                                    .expect("Unable to create diff");
+                                let matches = diff.deltas().any(|delta| {
+                                    let old_file_matches = delta
+                                        .old_file()
+                                        .path()
+                                        .map(|p| p.starts_with(path.as_path()))
+                                        .unwrap_or(false);
+                                    let new_file_matches = delta
+                                        .new_file()
+                                        .path()
+                                        .map(|p| p.starts_with(path.as_path()))
+                                        .unwrap_or(false);
+                                    old_file_matches || new_file_matches
+                                });
+
+                                if matches {
+                                    None
+                                } else {
+                                    Some(commit.id())
+                                }
                             }
                         })
                         .collect();
