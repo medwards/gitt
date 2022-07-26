@@ -1,7 +1,7 @@
 [package]
 name = "gitt"
 authors = ["Michael Edwards <medwards@walledcity.ca>"]
-version = "0.2.1"
+version = "0.2.2"
 description = "gitk but in your terminal"
 repository = "https://github.com/medwards/gitt"
 license = "GPL-3.0-or-later"
@@ -11,7 +11,7 @@ keywords = ["git", "terminal", "ui"]
 edition = "2018"
 
 [dependencies]
-git2 = "0.13"
+git2 = { version = "0.13", default-features = false }
 crossterm = { version = "0.19" }
 tui = { version = "0.16", default-features = false, features = ['crossterm'] }
 cassowary = "0.3"  # keep this in sync /w tui?
