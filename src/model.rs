@@ -22,11 +22,11 @@ pub enum CommitFilter {
 impl CommitFilter {
     pub fn apply<'a>(&self, commit: &'a Commit<'a>) -> bool {
         match self {
-            Self::Path((_path, filtered_oids)) => {
-                if filtered_oids.contains(&commit.id()) {
-                    return false;
+            Self::Path((_path, matched_oids)) => {
+                if matched_oids.contains(&commit.id()) {
+                    return true;
                 }
-                true
+                false
             }
             _ => unimplemented!(),
         }

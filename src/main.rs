@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             });
                             // If the tree ids are the same then they must not match
                             if path_tree != None && parent_path_tree == path_tree {
-                                Some(commit.id())
+                                None
                             } else {
                                 let diff = repository
                                     .diff_tree_to_tree(parent_tree.as_ref(), tree.as_ref(), None)
@@ -79,13 +79,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 });
 
                                 if matches {
-                                    None
-                                } else {
                                     Some(commit.id())
+                                } else {
+                                    None
                                 }
                             }
                         })
                         .collect();
+                    if is_verbose {
+                        println!("Identified {} commits that match the path ({}b)", ids.len(), ids.len() * std::mem::size_of::<git2::Oid>());
+                    }
 
                     model::CommitFilter::Path((path, ids))
                 })
